@@ -1,0 +1,16 @@
+huggingface_hub==0.25.2
+gradio
+pydantic==2.10.6
+pandas
+torch
+numpy
+sentence-transformers
+google-generativeai
+chromadb
+langgraph
+langgraph-checkpoint-sqlite
+langchain-chroma
+gspread
+google-auth
+
+python-dateutil
