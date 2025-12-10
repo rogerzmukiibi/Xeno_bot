@@ -19,7 +19,8 @@ jobs:
 
       - name: Sync files
         run: |
-          rsync -av --delete --exclude ".git" ./ hf_space/
+          rsync -av --delete --exclude ".git" ./ hf_space/ --ignore-errors --exclude "hf_space"
+
 
       - name: Commit & push
         run: |
