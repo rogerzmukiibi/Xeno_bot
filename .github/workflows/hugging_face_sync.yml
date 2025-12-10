@@ -1,0 +1,22 @@
+name: Sync with Hugging Face Hub
+
+on:
+  push:
+    branches:
+      - main 
+
+jobs:
+  sync-to-hub:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          fetch-depth: 0 # To fetch all history for LFS if needed
+
+      - name: Sync with Hugging Face
+        uses: nateraw/huggingface-sync-action@v0.0.4 # Use the latest version
+        with:
+          github_repo_id: ${{ github.repository }} # Automatically gets your GitHub repo ID
+          huggingface_repo_id: mukiibi/AskXeno # Replace with your Hugging Face repo ID
+          repo_type: space 
+          hf_token: ${{ secrets.HF_TOKEN }}

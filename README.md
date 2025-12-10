@@ -9,39 +9,52 @@ app_file: app.py
 pinned: false
 ---
 
-ASKXENO - AI-Powered XENO Support Assistant
-Overview
+# ASKXENO - AI-Powered XENO Support Assistant
+## Overview
 ASKXENO is an AI-powered customer support assistant designed to provide accurate and timely responses to queries about XENO financial services. Built with a Retrieval-Augmented Generation (RAG) pipeline, it leverages a knowledge base, intent classification, and conversation memory to deliver professional and context-aware responses. The application is deployed as a Hugging Face Space and includes performance tracking for response time analysis.
 Features
 
 Natural Language Query Handling: Responds to user questions about XENO services, including account management, transactions, platform features, and general information.
+
 Intent Classification: Detects simple intents (e.g., greetings, thanks, goodbyes) for quick, tailored responses without querying the knowledge base.
 RAG Pipeline: Uses a ChromaDB vector store and Google Gemini embeddings to retrieve relevant information from a JSON-based XENO knowledge base.
 Conversation Memory: Maintains chat history using LangGraph's SqliteSaver for context-aware responses.
+
 Performance Tracking: Logs response times for each processing step (e.g., intent classification, retrieval, LLM generation) to a Google Sheet for analysis.
+
 Gradio UI: Provides an interactive, user-friendly interface with session tracking and a chatbot-style conversation display.
+
 Error Handling: Includes robust logging to handle and record errors, with fallback local file logging if Google Sheets fails.
 
-Tech Stack
+## Tech Stack
 
-Python Libraries:
+**Python Libraries:**
+
 gradio: For the web-based user interface.
+
 pandas: For handling the JSON knowledge base.
+
 sentence_transformers: For similarity calculations.
+
 google.generativeai: For embeddings and LLM responses (Gemini API).
+
 chromadb: For vector storage and retrieval.
+
 langchain_chroma: For integrating ChromaDB with LangChain.
+
 gspread: For logging to Google Sheets.
+
 langgraph: For conversation memory management.
+
 torch: For tensor operations in similarity calculations.
 
 
-Database:
-SQLite for conversation memory (xeno_memory.db).
+## Database:
+SQLite for conversation memory (xeno_memory.db). [currently iys implemented in google sheets]
 ChromaDB for persistent vector storage (/tmp/xeno_db).
 
 
-External Services:
+## External Services:
 Google Sheets for logging responses and timing data.
 Google Gemini API for embeddings and text generation.
 
@@ -49,10 +62,6 @@ Google Gemini API for embeddings and text generation.
 
 Setup and Installation
 This project is designed to run in a Hugging Face Space. To set it up locally or in a similar environment, follow these steps:
-
-Clone the Repository (if not running in Hugging Face Space):
-git clone <repository-url>
-cd <repository-directory>
 
 
 Install Dependencies:Ensure Python 3.8+ is installed, then install the required packages:
