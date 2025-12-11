@@ -18,6 +18,7 @@ import re
 from typing import Dict, List, Tuple
 import time
 from contextlib import contextmanager
+import threading  # <--- Added for non-blocking feedback logging
 
 import logging
 import traceback
@@ -79,7 +80,11 @@ class PipelineTimer:
 timer = PipelineTimer()
 
 # === Configuration ===
-genai.configure(api_key=os.environ["GEMINI_API_KEY"])
+# Ensure API Key is set
+if "GEMINI_API_KEY" not in os.environ:
+    print("WARNING: GEMINI_API_KEY environment variable not found.")
+    
+genai.configure(api_key=os.environ.get("GEMINI_API_KEY"))
 embedding_model = "models/embedding-001"
 llm_model_name = "models/gemma-3-4b-it"
 collection_name = "xeno_collection"
@@ -94,24 +99,51 @@ def get_google_sheets_credentials():
     creds = Credentials.from_service_account_info(credentials_dict, scopes=scope)
     return creds
 
-client_gspread = gspread.authorize(get_google_sheets_credentials())
+# Authenticate
+try:
+    client_gspread = gspread.authorize(get_google_sheets_credentials())
+    spreadsheet = client_gspread.open("Response_Log")
+    response_sheet = spreadsheet.sheet1
+except Exception as e:
+    print(f"Error connecting to Google Sheets: {e}")
+    # Create dummy objects if connection fails to prevent app crash during dev
+    class DummySheet:
+        def append_row(self, *args, **kwargs): pass
+        def worksheet(self, *args): return self
+        def add_worksheet(self, *args, **kwargs): return self
+    spreadsheet = DummySheet()
+    response_sheet = DummySheet()
 
-# Open the Google Sheet and get both sheets
-spreadsheet = client_gspread.open("Response_Log")
-response_sheet = spreadsheet.sheet1  # Main response log
+# Setup Timing Sheet
 try:
     timing_sheet = spreadsheet.worksheet("Timing_Log")
 except:
-    # Create timing sheet if it doesn't exist
-    timing_sheet = spreadsheet.add_worksheet(title="Timing_Log", rows="1000", cols="15")
-    # Add headers
-    headers = [
-        "Timestamp", "Session_ID", "Question", "Total_Time_MS",
-        "Intent_Classification_MS", "Memory_Retrieval_MS", "RAG_Retrieval_MS", 
-        "Embedding_Generation_MS", "Similarity_Calculation_MS", "Context_Processing_MS",
-        "LLM_Generation_MS", "Memory_Update_MS", "Logging_MS", "Error_Step", "Notes"
-    ]
-    timing_sheet.append_row(headers)
+    try:
+        timing_sheet = spreadsheet.add_worksheet(title="Timing_Log", rows="1000", cols="15")
+        headers = [
+            "Timestamp", "Session_ID", "Question", "Total_Time_MS",
+            "Intent_Classification_MS", "Memory_Retrieval_MS", "RAG_Retrieval_MS", 
+            "Embedding_Generation_MS", "Similarity_Calculation_MS", "Context_Processing_MS",
+            "LLM_Generation_MS", "Memory_Update_MS", "Logging_MS", "Error_Step", "Notes"
+        ]
+        timing_sheet.append_row(headers)
+    except Exception as e:
+        print(f"Could not create Timing_Log sheet: {e}")
+        timing_sheet = None
+
+# === NEW: Setup Feedback Sheet ===
+try:
+    feedback_sheet = spreadsheet.worksheet("Feedback_Log")
+except:
+    try:
+        feedback_sheet = spreadsheet.add_worksheet(title="Feedback_Log", rows="1000", cols="6")
+        headers = ["Timestamp", "Session_ID", "User_Message", "Bot_Response", "Rating", "Flag_Reason"]
+        feedback_sheet.append_row(headers)
+    except Exception as e:
+        print(f"Could not create Feedback_Log sheet: {e}")
+        feedback_sheet = None
+
+# === Logging Functions ===
 
 def log_response(question, answer, source_ids, knowledge_pairs, session_id):
     """Original response logging function"""
@@ -130,17 +162,19 @@ def log_response(question, answer, source_ids, knowledge_pairs, session_id):
     except Exception as e:
         print(f"Failed to log to Google Sheet: {e}")
         with open("/tmp/response_log.txt", "a") as f:
-            f.write(f"{timestamp},{question},{answer},{source_ids},{knowledge_question_1},{knowledge_answer_1},{knowledge_question_2},{knowledge_answer_2}\n")
+            f.write(f"{timestamp},{question},{answer},{source_ids}\n")
 
 def log_timing_data(question, session_id, timing_summary, error_step=None, notes=None):
     """Log timing data to the timing sheet"""
+    if timing_sheet is None: return
+
     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     step_times = timing_summary['step_times']
     
     row = [
         timestamp,
         session_id,
-        question[:100] + "..." if len(question) > 100 else question,  # Truncate long questions
+        question[:100] + "..." if len(question) > 100 else question,
         timing_summary['total_time_ms'],
         step_times.get('intent_classification', 0),
         step_times.get('memory_retrieval', 0),
@@ -160,16 +194,55 @@ def log_timing_data(question, session_id, timing_summary, error_step=None, notes
         print(f"Logged timing data: Total {timing_summary['total_time_ms']}ms")
     except Exception as e:
         print(f"Failed to log timing data: {e}")
-        # Fallback to local file
-        with open("/tmp/timing_log.txt", "a") as f:
-            f.write(f"{timestamp},{session_id},{question},{timing_summary}\n")
+
+# === NEW: Feedback Functions ===
+
+def _log_feedback_background(row):
+    """Helper to run network request in background thread"""
+    try:
+        if feedback_sheet:
+            feedback_sheet.append_row(row)
+            print("Feedback logged successfully.")
+        else:
+            print("Feedback sheet not available.")
+    except Exception as e:
+        print(f"Failed to log feedback: {e}")
+
+def submit_feedback(rating, reason, history, session_id):
+    """
+    Handles user feedback submission.
+    rating: 'Positive' or 'Negative'
+    reason: User provided text
+    history: Gradio chat history list
+    """
+    if not history or len(history) == 0:
+        return "No conversation to rate yet."
+    
+    # Get the last interaction (Gradio history is a list of lists: [[user, bot], ...])
+    last_interaction = history[-1]
+    
+    # Safety check for history format
+    if isinstance(last_interaction, list) and len(last_interaction) >= 2:
+        user_msg = last_interaction[0]
+        bot_msg = last_interaction[1]
+    else:
+        return "Error reading conversation history."
+        
+    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    
+    # Prepare row data
+    row = [timestamp, session_id, user_msg, bot_msg, rating, reason]
+    
+    # Run in thread to prevent UI blocking
+    threading.Thread(target=_log_feedback_background, args=(row,)).start()
+    
+    return f"Feedback received ({rating}). Thank you!"
 
 # === LangGraph Memory Setup ===
 conn = sqlite3.connect("xeno_memory.db", check_same_thread=False)
 memory = SqliteSaver(conn=conn)
 
 def update_memory(config, user_message, assistant_message):
-    """Update memory with timing"""
     with timer.time_step("memory_update"):
         full_checkpoint = memory.get(config) or {}
         messages = full_checkpoint.get("channel_values", {}).get("messages", [])
@@ -189,7 +262,6 @@ def update_memory(config, user_message, assistant_message):
         memory.put(config, checkpoint_to_save, {}, {})
 
 def retrieve_memory(config):
-    """Retrieve memory with timing"""
     with timer.time_step("memory_retrieval"):
         full_checkpoint = memory.get(config) or {}
         return full_checkpoint.get("channel_values", {}).get("messages", [])
@@ -237,46 +309,39 @@ class IntentClassifier:
         }
     
     def classify_intent(self, message: str) -> Tuple[str, str]:
-        """Classify intent with timing"""
         message_lower = message.lower().strip()
-        
         for intent_name, intent_data in self.intent_patterns.items():
             for pattern in intent_data['patterns']:
                 if re.search(pattern, message_lower, re.IGNORECASE):
                     import random
                     response = random.choice(intent_data['responses'])
                     return intent_name, response
-        
         return 'query', ''
-    
-    def is_simple_intent(self, intent: str) -> bool:
-        simple_intents = ['greeting', 'thanks']
-        return intent in simple_intents
 
 intent_classifier = IntentClassifier()
 
 # === Load and Clean Knowledge Base ===
-df_kb = pd.read_json("XENO_Uganda_KnowledgeBase_Advisory.json")
-df_kb.dropna(subset=['Content'], inplace=True)
+try:
+    df_kb = pd.read_json("XENO_Uganda_KnowledgeBase_Advisory.json")
+    df_kb.dropna(subset=['Content'], inplace=True)
+    
+    def prepare_documents(data):
+        documents, metadatas, ids = [], [], []
+        for item in data:
+            documents.append(f"Question: {item['Question']}\nAnswer: {item['Content']}")
+            metadatas.append({
+                "question": item["Question"],
+                "content": item["Content"],
+                "id": str(item["ID"])
+            })
+            ids.append(str(item["ID"]))
+        return documents, metadatas, ids
 
-def prepare_documents(data):
+    xeno_data_list = df_kb.to_dict('records')
+    documents, metadatas, ids = prepare_documents(xeno_data_list)
+except Exception as e:
+    print(f"Warning: Could not load JSON knowledge base: {e}")
     documents, metadatas, ids = [], [], []
-    for item in data:
-        documents.append(f"Question: {item['Question']}\nAnswer: {item['Content']}")
-        metadatas.append({
-            "question": item["Question"],
-            "content": item["Content"],
-            "section": item.get("Section", ""),
-            "source": item.get("Source", ""),
-            "owner": item.get("Owner", ""),
-            "tag": item.get("Tag", ""),
-            "id": item["ID"]
-        })
-        ids.append(item["ID"])
-    return documents, metadatas, ids
-
-xeno_data_list = df_kb.to_dict('records')
-documents, metadatas, ids = prepare_documents(xeno_data_list)
 
 # === Setup ChromaDB ===
 try:
@@ -287,7 +352,8 @@ try:
     except:
         print(f"Creating new ChromaDB collection: {collection_name}")
         collection = client.create_collection(name=collection_name)
-        collection.add(documents=documents, metadatas=metadatas, ids=ids)
+        if documents:
+            collection.add(documents=documents, metadatas=metadatas, ids=ids)
 except Exception as e:
     print(f"Failed to initialize ChromaDB: {e}")
     raise
@@ -305,7 +371,6 @@ remember previous conversations."""
 
 # === Context Processing ===
 def process_context(results, cosine_scores, max_results=2):
-    """Process context with timing"""
     with timer.time_step("context_processing"):
         sorted_indices = np.argsort(cosine_scores)[::-1][:max_results]
         formatted_context = ""
@@ -320,13 +385,12 @@ def process_context(results, cosine_scores, max_results=2):
             formatted_context += f"Q: {question}\n"
             formatted_context += f"A: {answer}\n"
             formatted_context += "-" * 40 + "\n"
-            source_ids.append(result.metadata.get('id', 'N/A'))
+            source_ids.append(str(result.metadata.get('id', 'N/A')))
             knowledge_pairs.append((question, answer))
         return formatted_context, source_ids, knowledge_pairs
 
 # === LLM Generation ===
 def generate_xeno_response(context, question, chat_history):
-    """Generate response with timing"""
     with timer.time_step("llm_generation"):
         model = genai.GenerativeModel(llm_model_name)
         formatted_history = "\n".join(
@@ -340,7 +404,6 @@ def generate_xeno_response(context, question, chat_history):
 
 # === Main Interface Logic ===
 def get_context_and_answer(message, history, session_id="default"):
-    """Main pipeline with comprehensive timing"""
     # Reset timer for new request
     timer.reset()
     error_step = None
@@ -396,16 +459,16 @@ def get_context_and_answer(message, history, session_id="default"):
                             torch.tensor(query_embedding).float(), 
                             torch.tensor(doc_embeddings).float()
                         )[0].tolist()
-                        max_score = max(cosine_scores)
+                        max_score = max(cosine_scores) if cosine_scores else 0
 
                     if max_score < 0.4:
                         answer = "I'm sorry, I couldn't find specific information for your question. Could you try rephrasing it, or contact XENO support directly?"
                         notes.append(f"Low similarity score: {max_score:.3f}")
                     else:
-                        # Step 6: Context Processing (timed within function)
+                        # Step 6: Context Processing
                         context, source_ids_list, knowledge_pairs = process_context(queried_results, cosine_scores)
                         
-                        # Step 7: LLM Generation (timed within function)
+                        # Step 7: LLM Generation
                         answer = generate_xeno_response(context, message, chat_history)
                         source_ids = ", ".join(source_ids_list)
                         notes.append(f"Max similarity: {max_score:.3f}")
@@ -413,10 +476,11 @@ def get_context_and_answer(message, history, session_id="default"):
                 except Exception as e:
                     error_step = timer.current_step or "rag_processing"
                     print(f"Error during RAG processing: {e}")
+                    traceback.print_exc()
                     answer = "I apologize, but I'm having a technical issue. Please try again shortly or contact XENO support."
                     notes.append(f"Error: {str(e)}")
 
-        # Step 8: Memory Update (timed within function)
+        # Step 8: Memory Update
         update_memory(config, message, answer)
         
         # Step 9: Response Logging
@@ -440,7 +504,6 @@ def get_context_and_answer(message, history, session_id="default"):
         logging.error(f"Error in main pipeline: {e}")
         logging.error(traceback.format_exc())
         
-        # Still log timing data even on error
         timing_summary = timer.get_timing_summary()
         log_timing_data(
             message, 
@@ -478,22 +541,53 @@ def create_interface():
         *Simply type your question below to get started!*
         """)
         
-        session_id_box = gr.Textbox(label="Session ID", value=str(uuid.uuid4()), interactive=True)
+        # Hidden state for session
+        session_id_box = gr.Textbox(label="Session ID", value=str(uuid.uuid4()), visible=False)
         
         chatbot = gr.Chatbot(
             label="XENO Assistant",
             bubble_full_width=False,
-            height=500
+            height=450
         )
         
         with gr.Row():
             msg = gr.Textbox(
                 label="Your Message",
                 placeholder="Type your question here...",
-                scale=3,
+                scale=4,
             )
             send_button = gr.Button("Send", variant="primary", scale=1)
+        
+        # ===== FEEDBACK SECTION =====
+        with gr.Row():
+            with gr.Accordion("Rate this response / Flag Issue", open=False):
+                with gr.Row():
+                    thumbs_up = gr.Button("👍 Good Answer")
+                    thumbs_down = gr.Button("👎 Bad / Flag")
+                
+                feedback_reason = gr.Textbox(
+                    label="Reason ", 
+                    placeholder="E.g., Incorrect fees, hallucination,"
+                )
+                feedback_status = gr.Label(value="", label="Status", show_label=False)
 
+        # Feedback Event Listeners
+        # Logic: If Thumbs Up is clicked, send 'Positive'. If Textbox is empty, reason defaults to "Good".
+        thumbs_up.click(
+            fn=lambda h, s, r: submit_feedback("Positive", r if r else "Good", h, s),
+            inputs=[chatbot, session_id_box, feedback_reason],
+            outputs=[feedback_status]
+        )
+        
+        # Logic: If Thumbs Down is clicked, send 'Negative' with the content of the textbox.
+        thumbs_down.click(
+            fn=lambda r, h, s: submit_feedback("Negative", r, h, s),
+            inputs=[feedback_reason, chatbot, session_id_box],
+            outputs=[feedback_status]
+        )
+        # =============================
+
+        # Chat Event Listeners
         send_button.click(respond, [msg, chatbot, session_id_box], [msg, chatbot])
         msg.submit(respond, [msg, chatbot, session_id_box], [msg, chatbot])
             
