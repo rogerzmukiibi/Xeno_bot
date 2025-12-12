@@ -1,0 +1,3 @@
+"""
+XENO Bot source package
+"""

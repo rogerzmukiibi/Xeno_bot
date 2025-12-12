@@ -1,5 +1,8 @@
+"""
+XENO Bot - AI-powered customer service assistant
+Main application file with Gradio interface
+"""
 import uuid
-import os
 import gradio as gr
 import pandas as pd
 import torch
@@ -22,61 +25,23 @@ import threading  # <--- Added for non-blocking feedback logging
 
 import logging
 import traceback
-import sys
+from typing import List
 
-# ===== Configure Logging =====
-logging.basicConfig(
-    filename="app.log",
-    level=logging.INFO,
-    format="%(asctime)s - %(levelname)s - %(message)s"
+# Import custom modules
+from src.utils import PipelineTimer
+from src.config import SIMILARITY_THRESHOLD, SERVER_NAME, SERVER_PORT
+from src.memory import create_session_config, update_memory, retrieve_memory
+from src.intent_classifier import IntentClassifier
+from src.vector_store import (
+    initialize_vector_store,
+    generate_embeddings,
+    calculate_similarity,
+    process_context
 )
+from src.response_generator import generate_xeno_response
+from src.logger import log_response, log_timing_data
 
-def log_exception(exc_type, exc_value, exc_traceback):
-    if issubclass(exc_type, KeyboardInterrupt):
-        return
-    logging.critical("Uncaught exception", exc_info=(exc_type, exc_value, exc_traceback))
-
-sys.excepthook = log_exception
-logging.info("App started successfully.")
-
-# ===== Time Tracking Class =====
-class PipelineTimer:
-    def __init__(self):
-        self.reset()
-    
-    def reset(self):
-        """Reset all timing data for a new request"""
-        self.start_time = time.time()
-        self.step_times = {}
-        self.step_start = None
-        self.current_step = None
-    
-    @contextmanager
-    def time_step(self, step_name: str):
-        """Context manager to time a specific step"""
-        step_start = time.time()
-        self.current_step = step_name
-        try:
-            yield
-        finally:
-            step_end = time.time()
-            self.step_times[step_name] = round((step_end - step_start) * 1000, 2)  # Convert to milliseconds
-            self.current_step = None
-    
-    def get_total_time(self):
-        """Get total elapsed time since reset"""
-        return round((time.time() - self.start_time) * 1000, 2)
-    
-    def get_timing_summary(self):
-        """Get a summary of all timing data"""
-        total_time = self.get_total_time()
-        return {
-            'total_time_ms': total_time,
-            'step_times': self.step_times,
-            'timestamp': datetime.now().isoformat()
-        }
-
-# Initialize global timer
+# Initialize components
 timer = PipelineTimer()
 
 # === Configuration ===
@@ -410,14 +375,14 @@ def get_context_and_answer(message, history, session_id="default"):
     notes = []
     
     try:
-        config = {"configurable": {"thread_id": str(session_id), "checkpoint_ns": ""}}
+        # Create session config
+        config = create_session_config(session_id)
         
         # Step 1: Intent Classification
-        with timer.time_step("intent_classification"):
-            intent, direct_response = intent_classifier.classify_intent(message)
+        intent, direct_response = intent_classifier.classify_intent(message, timer)
         
         # Step 2: Memory Retrieval
-        chat_history = retrieve_memory(config)
+        chat_history = retrieve_memory(config, timer)
         
         answer = ""
         source_ids = "N/A"
@@ -437,21 +402,9 @@ def get_context_and_answer(message, history, session_id="default"):
                         queried_results = retriever.invoke(message)
                     
                     # Step 4: Embedding Generation
-                    with timer.time_step("embedding_generation"):
-                        query_embedding = genai.embed_content(
-                            model=embedding_model, 
-                            content=message, 
-                            task_type="retrieval_query"
-                        )['embedding']
-                        
-                        doc_embeddings = [
-                            genai.embed_content(
-                                model=embedding_model, 
-                                content=doc.page_content, 
-                                task_type="retrieval_document"
-                            )['embedding'] 
-                            for doc in queried_results
-                        ]
+                    query_embedding, doc_embeddings = generate_embeddings(
+                        message, queried_results, timer
+                    )
                     
                     # Step 5: Similarity Calculation
                     with timer.time_step("similarity_calculation"):
@@ -461,7 +414,7 @@ def get_context_and_answer(message, history, session_id="default"):
                         )[0].tolist()
                         max_score = max(cosine_scores) if cosine_scores else 0
 
-                    if max_score < 0.4:
+                    if max_score < SIMILARITY_THRESHOLD:
                         answer = "I'm sorry, I couldn't find specific information for your question. Could you try rephrasing it, or contact XENO support directly?"
                         notes.append(f"Low similarity score: {max_score:.3f}")
                     else:
@@ -484,8 +437,7 @@ def get_context_and_answer(message, history, session_id="default"):
         update_memory(config, message, answer)
         
         # Step 9: Response Logging
-        with timer.time_step("response_logging"):
-            log_response(message, answer, source_ids, knowledge_pairs, session_id)
+        log_response(message, answer, source_ids, knowledge_pairs, session_id, timer)
         
         # Log timing data
         timing_summary = timer.get_timing_summary()
@@ -515,8 +467,9 @@ def get_context_and_answer(message, history, session_id="default"):
         
         return "I apologize, but I encountered an error processing your request. Please try again."
 
+
 # === Enhanced Gradio UI ===
-def respond(message, history, session_id):
+def respond(message: str, history: List, session_id: str):
     """Gradio's main response function"""
     if not session_id:
         session_id = str(uuid.uuid4())
@@ -526,7 +479,9 @@ def respond(message, history, session_id):
     
     return "", history
 
+
 def create_interface():
+    """Create Gradio interface"""
     with gr.Blocks(theme=gr.themes.Soft()) as demo:
         gr.Markdown("""
         # ASKXENO
@@ -593,6 +548,12 @@ def create_interface():
             
     return demo
 
+
 if __name__ == "__main__":
     iface = create_interface()
-    iface.launch(share=False, server_name="0.0.0.0", server_port=7860, ssr_mode=False)
+    iface.launch(
+        share=False, 
+        server_name=SERVER_NAME, 
+        server_port=SERVER_PORT, 
+        ssr_mode=False
+    )
