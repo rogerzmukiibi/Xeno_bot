@@ -1,0 +1,27 @@
+services:
+  xeno-bot:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "7860:7860"
+    environment:
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+      - GOOGLE_SHEETS_CREDENTIALS=${GOOGLE_SHEETS_CREDENTIALS}
+    volumes:
+      - xeno_db:/tmp/xeno_db
+      - chroma_cache:/root/.cache/chroma
+      - ./xeno_memory.db:/app/xeno_memory.db
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:7860"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 5s
+
+volumes:
+  xeno_db:
+    driver: local
+  chroma_cache:
+    driver: local

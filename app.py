@@ -2,6 +2,7 @@
 XENO Bot - AI-powered customer service assistant
 Main application file with Gradio interface
 """
+import os
 import uuid
 import gradio as gr
 import pandas as pd
@@ -22,10 +23,8 @@ from typing import Dict, List, Tuple
 import time
 from contextlib import contextmanager
 import threading  # <--- Added for non-blocking feedback logging
-
 import logging
 import traceback
-from typing import List
 
 # Import custom modules
 from src.utils import PipelineTimer
@@ -379,10 +378,10 @@ def get_context_and_answer(message, history, session_id="default"):
         config = create_session_config(session_id)
         
         # Step 1: Intent Classification
-        intent, direct_response = intent_classifier.classify_intent(message, timer)
+        intent, direct_response = intent_classifier.classify_intent(message)
         
         # Step 2: Memory Retrieval
-        chat_history = retrieve_memory(config, timer)
+        chat_history = retrieve_memory(config)
         
         answer = ""
         source_ids = "N/A"
@@ -437,7 +436,7 @@ def get_context_and_answer(message, history, session_id="default"):
         update_memory(config, message, answer)
         
         # Step 9: Response Logging
-        log_response(message, answer, source_ids, knowledge_pairs, session_id, timer)
+        log_response(message, answer, source_ids, knowledge_pairs, session_id)
         
         # Log timing data
         timing_summary = timer.get_timing_summary()
