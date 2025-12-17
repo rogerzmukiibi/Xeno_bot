@@ -23,3 +23,8 @@ coverage.xml
 
 # Ignore database files
 *.db
+
+# Ignore binary files
+*.txt
+*.bin
+*.exe
