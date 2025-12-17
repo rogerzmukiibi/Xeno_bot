@@ -15,7 +15,7 @@ jobs:
 
       - name: Clone Hugging Face Space
         run: |
-          git clone https://mukiibi:${{ secrets.HF_TOKEN }}@huggingface.co/spaces/Sebunya/AskXeno hf_space
+          git clone https://mukiibi:${{ secrets.HF_TOKEN_RON }}@huggingface.co/spaces/Sebunya/AskXeno hf_space
 
       - name: Sync files
         run: |
