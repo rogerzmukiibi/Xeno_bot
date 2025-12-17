@@ -31,7 +31,7 @@ RUN pip install --upgrade pip setuptools wheel && \
 # Copy project files
 COPY app.py .
 COPY src/ ./src/
-COPY *.json ./
+COPY XENO_Uganda_KnowledgeBase_Advisory.json ./
 
 # Create necessary directories
 RUN mkdir -p /tmp/xeno_db
