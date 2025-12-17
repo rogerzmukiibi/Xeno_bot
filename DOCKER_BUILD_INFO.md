@@ -1,24 +1,6 @@
-# Docker Build Instructions & Fixes Applied
+# Docker Build Instructions 
 
-## Issues Fixed
-
-### 1. **Network Timeout during `pip install`**
-   - **Problem**: The Docker build was timing out while downloading large packages (especially `gradio` ~50-60MB)
-   - **Solution**: 
-     - Added `PIP_DEFAULT_TIMEOUT=100` environment variable (increased from default 15 seconds to 100)
-     - Added `PIP_RETRIES=5` to retry failed downloads
-     - Added `--default-timeout=100` flag to the pip install command
-     - Upgraded pip/setuptools/wheel before installing requirements
-
-### 2. **Missing `os` Module Import in app.py**
-   - **Problem**: `app.py` referenced `os.environ` without importing the `os` module
-   - **Solution**: Added `import os` at the top of app.py and removed duplicate `from typing import List`
-
-### 3. **Obsolete Docker Compose Version**
-   - **Problem**: docker-compose.yml contained `version: '3.8'` which is deprecated
-   - **Solution**: Removed the version attribute from docker-compose.yml
-
-## Updated Dockerfile Optimizations
+## Dockerfile Optimizations
 
 ```dockerfile
 ENV PIP_DEFAULT_TIMEOUT=100 \
