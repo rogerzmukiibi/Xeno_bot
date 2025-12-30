@@ -4,7 +4,7 @@ Handles loading and preparing knowledge base data
 """
 import pandas as pd
 from typing import List, Dict, Tuple, Any
-from src.config import KNOWLEDGE_BASE_PATH
+from config import KNOWLEDGE_BASE_PATH
 
 
 def load_knowledge_base(filepath: str = KNOWLEDGE_BASE_PATH) -> pd.DataFrame:

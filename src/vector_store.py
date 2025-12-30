@@ -9,14 +9,14 @@ from langchain_chroma import Chroma
 from sentence_transformers import util
 from typing import List, Tuple, Any
 import google.generativeai as genai
-from src.config import (
+from config import (
     COLLECTION_NAME, 
     CHROMA_DB_PATH, 
     RAG_TOP_K, 
     RAG_MAX_RESULTS,
     EMBEDDING_MODEL
 )
-from src.knowledge_base import get_knowledge_base_data
+from knowledge_base import get_knowledge_base_data
 
 
 def initialize_vector_store() -> Tuple[chromadb.Collection, Chroma, Any]:

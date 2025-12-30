@@ -12,7 +12,7 @@ langgraph-checkpoint-sqlite
 langchain-chroma
 gspread
 google-auth
-
+neo4j>=5.14.0
 python-dateutil
 
 # Testing dependencies
