@@ -113,6 +113,6 @@ class KnowledgeGraphIngestor:
 
 if __name__ == "__main__":
     ingestor = KnowledgeGraphIngestor()
-    ingestor.ingest_all(wipe_existing=True)
+    ingestor.ingest_all(wipe_existing=False)
     ingestor.close()
 

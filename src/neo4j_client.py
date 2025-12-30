@@ -5,7 +5,7 @@ Handles connection and basic query execution
 
 from neo4j import GraphDatabase
 from typing import Optional, Dict, Any
-from config import (
+from src.config import (
     NEO4J_URI,
     NEO4J_USER,
     NEO4J_PASSWORD
