@@ -29,37 +29,49 @@ mock_credentials = {
 import json
 os.environ.setdefault('GOOGLE_SHEETS_CREDENTIALS', json.dumps(mock_credentials))
 
-# Mock google.oauth2 and gspread modules before src.logger imports them
-mock_credentials_class = MagicMock()
-mock_creds_instance = MagicMock()
-mock_credentials_class.from_service_account_info = Mock(return_value=mock_creds_instance)
+# Create a proper mock for google.oauth2.service_account.Credentials
+mock_service_account = MagicMock()
+mock_service_account.Credentials = Mock()
+mock_service_account.Credentials.from_service_account_info = Mock()
 
 mock_oauth2 = MagicMock()
-mock_oauth2.service_account.Credentials = mock_credentials_class
-sys.modules['google.oauth2'] = mock_oauth2
-sys.modules['google.oauth2.service_account'] = mock_oauth2.service_account
+mock_oauth2.service_account = mock_service_account
 
+sys.modules['google.oauth2'] = mock_oauth2
+sys.modules['google.oauth2.service_account'] = mock_service_account
+
+# Mock gspread
 mock_gspread = MagicMock()
-mock_spreadsheet = MagicMock()
-mock_worksheet = MagicMock()
-mock_worksheet.append_row = Mock()
-mock_spreadsheet.get_worksheet = Mock(return_value=mock_worksheet)
-mock_spreadsheet.worksheet = Mock(return_value=mock_worksheet)
-mock_spreadsheet.add_worksheet = Mock(return_value=mock_worksheet)
-mock_client = MagicMock()
-mock_client.open = Mock(return_value=mock_spreadsheet)
-mock_gspread.authorize = Mock(return_value=mock_client)
 sys.modules['gspread'] = mock_gspread
 
 
 @pytest.fixture(autouse=True)
 def mock_google_sheets():
-    """Mock Google Sheets to avoid actual connections during testing"""
-    with patch('src.logger.response_sheet') as mock_response, \
-         patch('src.logger.timing_sheet') as mock_timing:
-        mock_response.append_row = Mock()
-        mock_timing.append_row = Mock()
-        yield mock_response, mock_timing
+    """
+    Mock Google Sheets to avoid actual connections during testing
+    """
+    # Mock the entire google.oauth2.service_account module
+    with patch('google.oauth2.service_account.Credentials') as mock_creds_class:
+        mock_creds_instance = Mock()
+        mock_creds_class.from_service_account_info.return_value = mock_creds_instance
+        
+        # Mock gspread
+        with patch('gspread.authorize') as mock_authorize:
+            mock_client = Mock()
+            mock_spreadsheet = Mock()
+            mock_worksheet = Mock()
+            mock_worksheet.append_row = Mock()
+            
+            mock_spreadsheet.get_worksheet.return_value = mock_worksheet
+            mock_spreadsheet.worksheet.return_value = mock_worksheet
+            mock_client.open.return_value = mock_spreadsheet
+            mock_authorize.return_value = mock_client
+            
+            # Now patch the logger module's sheet objects
+            with patch('src.logger.response_sheet', new=mock_worksheet) as mock_response, \
+                 patch('src.logger.timing_sheet', new=mock_worksheet) as mock_timing:
+                
+                yield mock_response, mock_timing
 
 
 @pytest.fixture
