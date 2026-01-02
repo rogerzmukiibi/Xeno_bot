@@ -9,7 +9,7 @@ import pandas as pd
 import torch
 import numpy as np
 from sentence_transformers import util
-import google.generativeai as genai
+from google import genai
 import chromadb
 from langchain_chroma import Chroma
 import gspread
@@ -47,8 +47,9 @@ timer = PipelineTimer()
 # Ensure API Key is set
 if "GEMINI_API_KEY" not in os.environ:
     print("WARNING: GEMINI_API_KEY environment variable not found.")
-    
-genai.configure(api_key=os.environ.get("GEMINI_API_KEY"))
+
+# Initialize the client
+client = genai.Client(api_key=os.environ.get("GEMINI_API_KEY"))
 embedding_model = "models/embedding-001"
 llm_model_name = "models/gemma-3-4b-it"
 collection_name = "xeno_collection"
@@ -356,14 +357,16 @@ def process_context(results, cosine_scores, max_results=2):
 # === LLM Generation ===
 def generate_xeno_response(context, question, chat_history):
     with timer.time_step("llm_generation"):
-        model = genai.GenerativeModel(llm_model_name)
         formatted_history = "\n".join(
             [f"{msg['role'].capitalize()}: {msg['content']}" for msg in chat_history]
         ) if chat_history else "None"
         
         prompt = f"{SYSTEM_PROMPT}\n### HISTORY ###\n{formatted_history}\n### CONTEXT ###\n{context}\n### QUESTION ###\n{question}"
         
-        response = model.generate_content(prompt)
+        response = client.models.generate_content(
+            model=llm_model_name,
+            contents=prompt
+        )
         return response.text.strip()
 
 # === Main Interface Logic ===
