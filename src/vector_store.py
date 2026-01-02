@@ -8,8 +8,9 @@ import torch
 from langchain_chroma import Chroma
 from sentence_transformers import util
 from typing import List, Tuple, Any
-import google.generativeai as genai
+from google import genai
 from src.config import (
+    client,
     COLLECTION_NAME, 
     CHROMA_DB_PATH, 
     RAG_TOP_K, 
@@ -79,21 +80,20 @@ def generate_embeddings(query: str, documents: List[Any], timer=None) -> Tuple[L
 def _generate_embeddings_impl(query: str, documents: List[Any]) -> Tuple[List[float], List[List[float]]]:
     """Internal implementation of embedding generation"""
     # Generate query embedding
-    query_embedding = genai.embed_content(
+    query_result = client.models.embed_content(
         model=EMBEDDING_MODEL, 
-        content=query, 
-        task_type="retrieval_query"
-    )['embedding']
+        content=query
+    )
+    query_embedding = query_result.embeddings[0].values
     
     # Generate document embeddings
-    doc_embeddings = [
-        genai.embed_content(
+    doc_embeddings = []
+    for doc in documents:
+        doc_result = client.models.embed_content(
             model=EMBEDDING_MODEL, 
-            content=doc.page_content, 
-            task_type="retrieval_document"
-        )['embedding'] 
-        for doc in documents
-    ]
+            content=doc.page_content
+        )
+        doc_embeddings.append(doc_result.embeddings[0].values)
     
     return query_embedding, doc_embeddings
 

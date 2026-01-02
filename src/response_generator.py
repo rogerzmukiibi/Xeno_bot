@@ -2,9 +2,9 @@
 Response Generation module for XENO Bot
 Handles LLM response generation
 """
-import google.generativeai as genai
+from google import genai
 from typing import List, Dict
-from src.config import LLM_MODEL_NAME, SYSTEM_PROMPT
+from src.config import LLM_MODEL_NAME, SYSTEM_PROMPT, client
 
 
 def generate_xeno_response(context: str, question: str, chat_history: List[Dict[str, str]], timer=None) -> str:
@@ -29,8 +29,6 @@ def generate_xeno_response(context: str, question: str, chat_history: List[Dict[
 
 def _generate_response_impl(context: str, question: str, chat_history: List[Dict[str, str]]) -> str:
     """Internal implementation of response generation"""
-    model = genai.GenerativeModel(LLM_MODEL_NAME)
-    
     # Format chat history
     formatted_history = "\n".join(
         [f"{msg['role'].capitalize()}: {msg['content']}" for msg in chat_history]
@@ -40,7 +38,10 @@ def _generate_response_impl(context: str, question: str, chat_history: List[Dict
     prompt = f"{SYSTEM_PROMPT}\n### HISTORY ###\n{formatted_history}\n### CONTEXT ###\n{context}\n### QUESTION ###\n{question}"
     
     # Generate response
-    response = model.generate_content(prompt)
+    response = client.models.generate_content(
+        model=LLM_MODEL_NAME,
+        contents=prompt
+    )
     
     return response.text.strip()
 
