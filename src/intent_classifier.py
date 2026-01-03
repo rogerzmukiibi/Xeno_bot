@@ -47,6 +47,16 @@ class IntentClassifier:
                     "Take care! Feel free to return anytime you need help with XENO services.",
                     "Have a wonderful day! Don't hesitate to reach out if you need assistance with XENO."
                 ]
+            },
+            'join': {
+                'patterns': [
+                    r'\b(join|sign up|register|create account|open account|start investing)\b',
+                    r'how do i join',
+                    r'how to join'
+                ],
+                'responses': [
+                    "To join XENO, you can download the XENO App from your mobile app store (Android or iOS) and select 'Join'. Alternatively, you can sign up at www.myxeno.com. If you don't have a smartphone, you can dial *165*5*7# on MTN."
+                ]
             }
         }
     
@@ -71,11 +81,46 @@ class IntentClassifier:
         """Internal implementation of intent classification"""
         message_lower = message.lower().strip()
         
-        for intent_name, intent_data in self.intent_patterns.items():
+        # 1. Check for specific intents first (Join, Thanks, Goodbye)
+        # These are usually standalone or specific enough to override 'query'
+        for intent_name in ['join', 'thanks', 'goodbye']:
+            if intent_name in self.intent_patterns:
+                intent_data = self.intent_patterns[intent_name]
+                for pattern in intent_data['patterns']:
+                    if re.search(pattern, message_lower, re.IGNORECASE):
+                        response = random.choice(intent_data['responses'])
+                        return intent_name, response
+
+        # 2. Check for Greeting
+        # Special logic: Only classify as 'greeting' if it DOES NOT look like a question.
+        if 'greeting' in self.intent_patterns:
+            intent_data = self.intent_patterns['greeting']
             for pattern in intent_data['patterns']:
                 if re.search(pattern, message_lower, re.IGNORECASE):
+                    # Heuristic 1: Check for question indicators
+                    query_indicators = [
+                        r'\bhow\b', r'\bwhat\b', r'\bwhy\b', r'\bwhen\b', r'\bwhere\b', 
+                        r'\bcan\b', r'\bcould\b', r'\bwould\b', r'\bhelp\b', 
+                        r'\binvest\b', r'\bwithdraw\b', r'\bdeposit\b', r'\bfees\b', 
+                        r'\brates\b', r'\binterest\b', r'\bbalance\b', r'\baccount\b'
+                    ]
+                    
+                    # If any query indicator is present, treat as query
+                    for indicator in query_indicators:
+                        if re.search(indicator, message_lower, re.IGNORECASE):
+                            # Exception: "How are you" is a greeting, not a query
+                            if "how are you" in message_lower or "how do you do" in message_lower:
+                                continue
+                            return 'query', ''
+
+                    # Heuristic 2: Length check (fallback)
+                    # If it's still very long (> 10 words) but no keywords found, still treat as query to be safe
+                    word_count = len(message_lower.split())
+                    if word_count > 10:
+                        return 'query', ''
+                    
                     response = random.choice(intent_data['responses'])
-                    return intent_name, response
+                    return 'greeting', response
         
         return 'query', ''
     
@@ -89,7 +134,7 @@ class IntentClassifier:
         Returns:
             True if simple intent, False otherwise
         """
-        simple_intents = ['greeting', 'thanks']
+        simple_intents = ['greeting', 'thanks', 'goodbye', 'join']
         return intent in simple_intents
     
     def add_intent(self, intent_name: str, patterns: List[str], responses: List[str]):

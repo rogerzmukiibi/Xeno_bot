@@ -3,7 +3,11 @@ Configuration module for XENO Bot
 Handles environment variables and application settings
 """
 import os
+from dotenv import load_dotenv
 import google.generativeai as genai
+
+# Load environment variables
+load_dotenv()
 
 # === API Configuration ===
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
@@ -31,8 +35,8 @@ RESPONSE_SHEET_INDEX = 0  # sheet1
 TIMING_SHEET_NAME = "Timing_Log"
 
 # === RAG Configuration ===
-RAG_TOP_K = 4
-RAG_MAX_RESULTS = 2
+RAG_TOP_K = 10
+RAG_MAX_RESULTS = 5
 SIMILARITY_THRESHOLD = 0.4
 
 # === Server Configuration ===

@@ -22,7 +22,7 @@ import re
 from typing import Dict, List, Tuple
 import time
 from contextlib import contextmanager
-import threading  # <--- Added for non-blocking feedback logging
+import threading
 import logging
 import traceback
 
@@ -39,6 +39,8 @@ from src.vector_store import (
 )
 from src.response_generator import generate_xeno_response
 from src.logger import log_response, log_timing_data
+from src.agent_graph import agent_app
+from langchain_core.messages import HumanMessage, AIMessage
 
 # Initialize components
 timer = PipelineTimer()
@@ -182,15 +184,31 @@ def submit_feedback(rating, reason, history, session_id):
     if not history or len(history) == 0:
         return "No conversation to rate yet."
     
-    # Get the last interaction (Gradio history is a list of lists: [[user, bot], ...])
-    last_interaction = history[-1]
-    
-    # Safety check for history format
-    if isinstance(last_interaction, list) and len(last_interaction) >= 2:
-        user_msg = last_interaction[0]
-        bot_msg = last_interaction[1]
-    else:
-        return "Error reading conversation history."
+    user_msg = "Unknown"
+    bot_msg = "Unknown"
+
+    try:
+        # Check format
+        if isinstance(history[0], dict):
+            # Messages format: [{'role': 'user', ...}, {'role': 'assistant', ...}]
+            # We expect the last message to be from assistant
+            if len(history) >= 1:
+                last_msg = history[-1]
+                if last_msg.get('role') == 'assistant':
+                    bot_msg = last_msg.get('content')
+                    if len(history) >= 2:
+                        prev_msg = history[-2]
+                        if prev_msg.get('role') == 'user':
+                            user_msg = prev_msg.get('content')
+        elif isinstance(history[0], list):
+            # Old tuples format: [[user, bot], ...]
+            last_interaction = history[-1]
+            if len(last_interaction) >= 2:
+                user_msg = last_interaction[0]
+                bot_msg = last_interaction[1]
+    except Exception as e:
+        print(f"Error parsing history for feedback: {e}")
+        return "Error processing feedback."
         
     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     
@@ -308,22 +326,23 @@ except Exception as e:
     documents, metadatas, ids = [], [], []
 
 # === Setup ChromaDB ===
-try:
-    client = chromadb.PersistentClient(path="/tmp/xeno_db")
-    try:
-        collection = client.get_collection(name=collection_name)
-        print(f"Loaded existing ChromaDB collection: {collection_name}")
-    except:
-        print(f"Creating new ChromaDB collection: {collection_name}")
-        collection = client.create_collection(name=collection_name)
-        if documents:
-            collection.add(documents=documents, metadatas=metadatas, ids=ids)
-except Exception as e:
-    print(f"Failed to initialize ChromaDB: {e}")
-    raise
+# MOVED TO src/vector_store.py and src/agent_graph.py
+# try:
+#     client = chromadb.PersistentClient(path="/tmp/xeno_db")
+#     try:
+#         collection = client.get_collection(name=collection_name)
+#         print(f"Loaded existing ChromaDB collection: {collection_name}")
+#     except:
+#         print(f"Creating new ChromaDB collection: {collection_name}")
+#         collection = client.create_collection(name=collection_name)
+#         if documents:
+#             collection.add(documents=documents, metadatas=metadatas, ids=ids)
+# except Exception as e:
+#     print(f"Failed to initialize ChromaDB: {e}")
+#     raise
 
-vector_store = Chroma(client=client, collection_name=collection_name)
-retriever = vector_store.as_retriever(search_type="similarity", search_kwargs={"k": 4})
+# vector_store = Chroma(client=client, collection_name=collection_name)
+# retriever = vector_store.as_retriever(search_type="similarity", search_kwargs={"k": 4})
 
 # === Prompt System ===
 SYSTEM_PROMPT = """You are a friendly XENO Support Assistant, an AI-powered helpful and professional customer service representative.
@@ -377,60 +396,46 @@ def get_context_and_answer(message, history, session_id="default"):
         # Create session config
         config = create_session_config(session_id)
         
-        # Step 1: Intent Classification
-        intent, direct_response = intent_classifier.classify_intent(message)
-        
-        # Step 2: Memory Retrieval
-        chat_history = retrieve_memory(config)
-        
-        answer = ""
-        source_ids = "N/A"
-        knowledge_pairs = []
-
-        if intent != 'query':
-            answer = direct_response
-            notes.append(f"Simple intent: {intent}")
-        else: 
-            if len(message.strip()) < 3:
-                answer = "I'd be happy to help! Could you please provide more details about what you'd like to know?"
-                notes.append("Message too short")
+        # Retrieve memory
+        chat_history_dicts = retrieve_memory(config)
+        messages = []
+        for msg in chat_history_dicts:
+            if msg['role'] == 'user':
+                messages.append(HumanMessage(content=msg['content']))
             else:
-                try:
-                    # Step 3: RAG Retrieval
-                    with timer.time_step("rag_retrieval"):
-                        queried_results = retriever.invoke(message)
-                    
-                    # Step 4: Embedding Generation
-                    query_embedding, doc_embeddings = generate_embeddings(
-                        message, queried_results, timer
-                    )
-                    
-                    # Step 5: Similarity Calculation
-                    with timer.time_step("similarity_calculation"):
-                        cosine_scores = util.cos_sim(
-                            torch.tensor(query_embedding).float(), 
-                            torch.tensor(doc_embeddings).float()
-                        )[0].tolist()
-                        max_score = max(cosine_scores) if cosine_scores else 0
-
-                    if max_score < SIMILARITY_THRESHOLD:
-                        answer = "I'm sorry, I couldn't find specific information for your question. Could you try rephrasing it, or contact XENO support directly?"
-                        notes.append(f"Low similarity score: {max_score:.3f}")
-                    else:
-                        # Step 6: Context Processing
-                        context, source_ids_list, knowledge_pairs = process_context(queried_results, cosine_scores)
-                        
-                        # Step 7: LLM Generation
-                        answer = generate_xeno_response(context, message, chat_history)
-                        source_ids = ", ".join(source_ids_list)
-                        notes.append(f"Max similarity: {max_score:.3f}")
-
-                except Exception as e:
-                    error_step = timer.current_step or "rag_processing"
-                    print(f"Error during RAG processing: {e}")
-                    traceback.print_exc()
-                    answer = "I apologize, but I'm having a technical issue. Please try again shortly or contact XENO support."
-                    notes.append(f"Error: {str(e)}")
+                messages.append(AIMessage(content=msg['content']))
+        
+        # Invoke Agent
+        with timer.time_step("agent_execution"):
+            inputs = {
+                "session_id": session_id,
+                "question": message,
+                "messages": messages,
+                "documents": [],
+                "context_metadata": [],
+                "generation": "",
+                "intent": "",
+                "steps": []
+            }
+            result = agent_app.invoke(inputs)
+            
+        answer = result["generation"]
+        intent = result["intent"]
+        steps = result["steps"]
+        
+        # Process metadata for logging
+        source_ids_list = []
+        knowledge_pairs = []
+        
+        if result.get("context_metadata"):
+            for meta in result["context_metadata"]:
+                source_ids_list.append(str(meta.get('id', 'N/A')))
+                knowledge_pairs.append((meta.get('question', 'N/A'), meta.get('content', 'N/A')))
+        
+        source_ids = ", ".join(source_ids_list) if source_ids_list else "N/A"
+        
+        notes.append(f"Intent: {intent}")
+        notes.append(f"Steps: {', '.join(steps)}")
 
         # Step 8: Memory Update
         update_memory(config, message, answer)
@@ -470,18 +475,46 @@ def get_context_and_answer(message, history, session_id="default"):
 # === Enhanced Gradio UI ===
 def respond(message: str, history: List, session_id: str):
     """Gradio's main response function"""
+    print(f"Received message: {message}")
+    
     if not session_id:
         session_id = str(uuid.uuid4())
     
     bot_response = get_context_and_answer(message, history, session_id)
-    history.append([message, bot_response])
     
-    return "", history
+    # Normalize history to ensure compatibility with Gradio 6.0
+    clean_history = []
+    for msg in history:
+        if isinstance(msg, dict) and 'content' in msg:
+            content = msg['content']
+            role = msg.get('role', 'user')
+            
+            if isinstance(content, list) and len(content) > 0 and isinstance(content[0], dict) and 'text' in content[0]:
+                clean_history.append({"role": role, "content": content[0]['text']})
+            elif isinstance(content, str):
+                clean_history.append({"role": role, "content": content})
+            else:
+                clean_history.append({"role": role, "content": str(content)})
+        elif isinstance(msg, (list, tuple)) and len(msg) == 2:
+            # Handle old tuple format [user_msg, bot_msg]
+            if msg[0] is not None:
+                clean_history.append({"role": "user", "content": str(msg[0])})
+            if msg[1] is not None:
+                clean_history.append({"role": "assistant", "content": str(msg[1])})
+        else:
+             # Fallback: try to cast to string if it's something else, or skip
+             pass
+
+    # Append in 'messages' format (list of dicts)
+    clean_history.append({"role": "user", "content": message})
+    clean_history.append({"role": "assistant", "content": bot_response})
+    
+    return "", clean_history
 
 
 def create_interface():
     """Create Gradio interface"""
-    with gr.Blocks(theme=gr.themes.Soft()) as demo:
+    with gr.Blocks() as demo:
         gr.Markdown("""
         # ASKXENO
         **Welcome to XENO AI Support!**
@@ -500,7 +533,6 @@ def create_interface():
         
         chatbot = gr.Chatbot(
             label="XENO Assistant",
-            bubble_full_width=False,
             height=450
         )
         
@@ -549,10 +581,17 @@ def create_interface():
 
 
 if __name__ == "__main__":
-    iface = create_interface()
-    iface.launch(
-        share=False, 
-        server_name=SERVER_NAME, 
-        server_port=SERVER_PORT, 
-        ssr_mode=False
-    )
+    try:
+        print("Creating interface...")
+        iface = create_interface()
+        print(f"Launching Gradio on {SERVER_NAME}:{SERVER_PORT}...")
+        iface.launch(
+            share=False, 
+            server_name=SERVER_NAME, 
+            server_port=SERVER_PORT, 
+            ssr_mode=False,
+            theme=gr.themes.Soft()
+        )
+    except Exception as e:
+        print(f"Failed to start app: {e}")
+        traceback.print_exc()
