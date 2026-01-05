@@ -82,7 +82,7 @@ def _generate_embeddings_impl(query: str, documents: List[Any]) -> Tuple[List[fl
     # Generate query embedding
     query_result = client.models.embed_content(
         model=EMBEDDING_MODEL, 
-        content=query
+        contents=query
     )
     query_embedding = query_result.embeddings[0].values
     
@@ -91,7 +91,7 @@ def _generate_embeddings_impl(query: str, documents: List[Any]) -> Tuple[List[fl
     for doc in documents:
         doc_result = client.models.embed_content(
             model=EMBEDDING_MODEL, 
-            content=doc.page_content
+            contents=doc.page_content
         )
         doc_embeddings.append(doc_result.embeddings[0].values)
     
