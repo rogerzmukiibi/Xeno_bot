@@ -4,15 +4,24 @@ Tests LangGraph memory operations
 """
 import unittest
 import os
-import sqlite3
-import tempfile
+import sys
+from pathlib import Path
 from unittest.mock import patch, Mock, MagicMock
+
+# Add the parent directory to sys.path to find src module
+sys.path.insert(0, str(Path(__file__).parent.parent))
+
+# Mock the config module before importing memory
+config_mock = Mock()
+config_mock.SQLITE_DB_PATH = ':memory:'  # Use in-memory database for tests
+
+sys.modules['config'] = config_mock
+
+# Now import the memory module
 from src.memory import (
     update_memory,
     retrieve_memory,
-    create_session_config,
-    _update_memory_impl,
-    _retrieve_memory_impl
+    create_session_config
 )
 
 
@@ -27,6 +36,8 @@ class TestMemory(unittest.TestCase):
                 "checkpoint_ns": ""
             }
         }
+        self.user_message = "How do I create an account?"
+        self.assistant_message = "You can create an account by visiting our website."
     
     def test_create_session_config(self):
         """Test creating session config"""
@@ -47,8 +58,8 @@ class TestMemory(unittest.TestCase):
         self.assertEqual(config["configurable"]["thread_id"], "default")
     
     @patch('src.memory.memory')
-    def test_update_memory_impl(self, mock_memory):
-        """Test internal memory update implementation"""
+    def test_update_memory_with_existing_checkpoint(self, mock_memory):
+        """Test updating memory with existing checkpoint"""
         # Mock memory.get to return existing checkpoint
         mock_checkpoint = {
             "channel_values": {
@@ -60,10 +71,7 @@ class TestMemory(unittest.TestCase):
         }
         mock_memory.get.return_value = mock_checkpoint
         
-        user_message = "New question"
-        assistant_message = "New answer"
-        
-        _update_memory_impl(self.test_config, user_message, assistant_message)
+        update_memory(self.test_config, self.user_message, self.assistant_message)
         
         # Verify memory.get was called
         mock_memory.get.assert_called_once_with(self.test_config)
@@ -79,9 +87,9 @@ class TestMemory(unittest.TestCase):
         messages = saved_checkpoint["channel_values"]["messages"]
         self.assertEqual(len(messages), 4)  # 2 existing + 2 new
         self.assertEqual(messages[-2]["role"], "user")
-        self.assertEqual(messages[-2]["content"], user_message)
+        self.assertEqual(messages[-2]["content"], self.user_message)
         self.assertEqual(messages[-1]["role"], "assistant")
-        self.assertEqual(messages[-1]["content"], assistant_message)
+        self.assertEqual(messages[-1]["content"], self.assistant_message)
     
     @patch('src.memory.memory')
     def test_update_memory_empty_checkpoint(self, mock_memory):
@@ -89,10 +97,7 @@ class TestMemory(unittest.TestCase):
         # Mock memory.get to return None
         mock_memory.get.return_value = None
         
-        user_message = "First question"
-        assistant_message = "First answer"
-        
-        _update_memory_impl(self.test_config, user_message, assistant_message)
+        update_memory(self.test_config, self.user_message, self.assistant_message)
         
         # Verify memory.put was called
         mock_memory.put.assert_called_once()
@@ -105,7 +110,9 @@ class TestMemory(unittest.TestCase):
         # Should have 2 messages
         self.assertEqual(len(messages), 2)
         self.assertEqual(messages[0]["role"], "user")
+        self.assertEqual(messages[0]["content"], self.user_message)
         self.assertEqual(messages[1]["role"], "assistant")
+        self.assertEqual(messages[1]["content"], self.assistant_message)
     
     @patch('src.memory.memory')
     def test_update_memory_with_timer(self, mock_memory):
@@ -116,14 +123,25 @@ class TestMemory(unittest.TestCase):
         mock_timer.time_step.return_value.__enter__ = Mock()
         mock_timer.time_step.return_value.__exit__ = Mock()
         
-        update_memory(self.test_config, "Test", "Answer", timer=mock_timer)
+        update_memory(self.test_config, self.user_message, self.assistant_message, timer=mock_timer)
         
         # Verify timer was used
         mock_timer.time_step.assert_called_once_with("memory_update")
+        mock_memory.put.assert_called_once()
     
     @patch('src.memory.memory')
-    def test_retrieve_memory_impl(self, mock_memory):
-        """Test internal memory retrieval implementation"""
+    def test_update_memory_without_timer(self, mock_memory):
+        """Test update_memory without timer"""
+        mock_memory.get.return_value = {}
+        
+        update_memory(self.test_config, self.user_message, self.assistant_message)
+        
+        # Should still work without timer
+        mock_memory.put.assert_called_once()
+    
+    @patch('src.memory.memory')
+    def test_retrieve_memory(self, mock_memory):
+        """Test memory retrieval"""
         # Mock memory.get to return checkpoint with messages
         mock_checkpoint = {
             "channel_values": {
@@ -137,7 +155,7 @@ class TestMemory(unittest.TestCase):
         }
         mock_memory.get.return_value = mock_checkpoint
         
-        messages = _retrieve_memory_impl(self.test_config)
+        messages = retrieve_memory(self.test_config)
         
         # Verify memory.get was called
         mock_memory.get.assert_called_once_with(self.test_config)
@@ -145,6 +163,9 @@ class TestMemory(unittest.TestCase):
         # Verify messages were retrieved
         self.assertEqual(len(messages), 4)
         self.assertEqual(messages[0]["content"], "Question 1")
+        self.assertEqual(messages[0]["role"], "user")
+        self.assertEqual(messages[1]["content"], "Answer 1")
+        self.assertEqual(messages[1]["role"], "assistant")
     
     @patch('src.memory.memory')
     def test_retrieve_memory_empty(self, mock_memory):
@@ -152,7 +173,7 @@ class TestMemory(unittest.TestCase):
         # Mock memory.get to return None
         mock_memory.get.return_value = None
         
-        messages = _retrieve_memory_impl(self.test_config)
+        messages = retrieve_memory(self.test_config)
         
         # Should return empty list
         self.assertEqual(messages, [])
@@ -160,23 +181,53 @@ class TestMemory(unittest.TestCase):
     @patch('src.memory.memory')
     def test_retrieve_memory_with_timer(self, mock_memory):
         """Test retrieve_memory with timer"""
-        mock_memory.get.return_value = {}
+        mock_checkpoint = {
+            "channel_values": {
+                "messages": [
+                    {"role": "user", "content": "Test question"},
+                    {"role": "assistant", "content": "Test answer"}
+                ]
+            }
+        }
+        mock_memory.get.return_value = mock_checkpoint
+        
         mock_timer = Mock()
         mock_timer.time_step = MagicMock()
         mock_timer.time_step.return_value.__enter__ = Mock()
         mock_timer.time_step.return_value.__exit__ = Mock()
         
-        retrieve_memory(self.test_config, timer=mock_timer)
+        messages = retrieve_memory(self.test_config, timer=mock_timer)
         
         # Verify timer was used
         mock_timer.time_step.assert_called_once_with("memory_retrieval")
+        
+        # Verify messages were retrieved
+        self.assertEqual(len(messages), 2)
+    
+    @patch('src.memory.memory')
+    def test_retrieve_memory_without_timer(self, mock_memory):
+        """Test retrieve_memory without timer"""
+        mock_checkpoint = {
+            "channel_values": {
+                "messages": [
+                    {"role": "user", "content": "Test question"},
+                    {"role": "assistant", "content": "Test answer"}
+                ]
+            }
+        }
+        mock_memory.get.return_value = mock_checkpoint
+        
+        messages = retrieve_memory(self.test_config)
+        
+        # Should still work without timer
+        self.assertEqual(len(messages), 2)
     
     @patch('src.memory.memory')
     def test_checkpoint_structure(self, mock_memory):
         """Test that checkpoint has correct structure"""
         mock_memory.get.return_value = None
         
-        _update_memory_impl(self.test_config, "Test", "Answer")
+        update_memory(self.test_config, self.user_message, self.assistant_message)
         
         call_args = mock_memory.put.call_args
         checkpoint = call_args[0][1]
@@ -188,7 +239,61 @@ class TestMemory(unittest.TestCase):
         self.assertIn("channel_values", checkpoint)
         self.assertIn("channel_versions", checkpoint)
         self.assertIn("versions_seen", checkpoint)
+        
+        # Verify specific values
         self.assertEqual(checkpoint["v"], 1)
+        self.assertIsInstance(checkpoint["id"], str)  # Should be a UUID string
+        self.assertIsInstance(checkpoint["ts"], str)  # Should be an ISO timestamp
+        
+        # Verify messages are in channel_values
+        self.assertIn("messages", checkpoint["channel_values"])
+        messages = checkpoint["channel_values"]["messages"]
+        self.assertEqual(len(messages), 2)
+    
+    @patch('src.memory.memory')
+    def test_full_conversation_flow(self, mock_memory):
+        """Test full conversation flow with multiple updates and retrievals"""
+        # Start with empty memory
+        mock_memory.get.return_value = None
+        
+        # First interaction
+        update_memory(self.test_config, "Question 1", "Answer 1")
+        
+        # Mock get to return first checkpoint
+        first_checkpoint = {
+            "channel_values": {
+                "messages": [
+                    {"role": "user", "content": "Question 1"},
+                    {"role": "assistant", "content": "Answer 1"}
+                ]
+            }
+        }
+        mock_memory.get.return_value = first_checkpoint
+        
+        # Retrieve first messages
+        messages1 = retrieve_memory(self.test_config)
+        self.assertEqual(len(messages1), 2)
+        
+        # Second interaction
+        update_memory(self.test_config, "Question 2", "Answer 2")
+        
+        # Mock get to return updated checkpoint
+        second_checkpoint = {
+            "channel_values": {
+                "messages": [
+                    {"role": "user", "content": "Question 1"},
+                    {"role": "assistant", "content": "Answer 1"},
+                    {"role": "user", "content": "Question 2"},
+                    {"role": "assistant", "content": "Answer 2"}
+                ]
+            }
+        }
+        mock_memory.get.return_value = second_checkpoint
+        
+        # Retrieve all messages
+        messages2 = retrieve_memory(self.test_config)
+        self.assertEqual(len(messages2), 4)
+        self.assertEqual(messages2[-1]["content"], "Answer 2")
 
 
 if __name__ == '__main__':

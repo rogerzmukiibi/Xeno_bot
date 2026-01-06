@@ -7,7 +7,14 @@ import pandas as pd
 import json
 import tempfile
 import os
+import sys
+from pathlib import Path
 from unittest.mock import patch, Mock
+
+# Add the parent directory to sys.path to find src module
+sys.path.insert(0, str(Path(__file__).parent.parent))
+
+# Now import the module
 from src.knowledge_base import (
     load_knowledge_base,
     prepare_documents,
