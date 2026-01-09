@@ -80,20 +80,20 @@ def generate_embeddings(query: str, documents: List[Any], timer=None) -> Tuple[L
 def _generate_embeddings_impl(query: str, documents: List[Any]) -> Tuple[List[float], List[List[float]]]:
     """Internal implementation of embedding generation"""
     # Generate query embedding
-    query_result = client.models.embed_content(
+    query_result = client.embed_content(
         model=EMBEDDING_MODEL, 
-        contents=query
+        content=query
     )
-    query_embedding = query_result.embeddings[0].values
+    query_embedding = query_result['embedding']
     
     # Generate document embeddings
     doc_embeddings = []
     for doc in documents:
-        doc_result = client.models.embed_content(
+        doc_result = client.embed_content(
             model=EMBEDDING_MODEL, 
-            contents=doc.page_content
+            content=doc.page_content
         )
-        doc_embeddings.append(doc_result.embeddings[0].values)
+        doc_embeddings.append(doc_result['embedding'])
     
     return query_embedding, doc_embeddings
 
