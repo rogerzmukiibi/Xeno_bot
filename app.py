@@ -22,13 +22,13 @@ import re
 from typing import Dict, List, Tuple
 import time
 from contextlib import contextmanager
-import threading  # <--- Added for non-blocking feedback logging
+import threading  
 import logging
 import traceback
 
 # Import custom modules
 from src.utils import PipelineTimer
-from src.config import SIMILARITY_THRESHOLD, SERVER_NAME, SERVER_PORT
+from src import config
 from src.memory import create_session_config, update_memory, retrieve_memory
 from src.intent_classifier import IntentClassifier
 from src.vector_store import (
@@ -38,7 +38,7 @@ from src.vector_store import (
     process_context
 )
 from src.response_generator import generate_xeno_response
-from src.logger import log_response, log_timing_data
+from src.logger import log_response, log_timing_data, get_google_sheets_credentials
 
 # Initialize components
 timer = PipelineTimer()
@@ -54,19 +54,10 @@ llm_model_name = "models/gemma-3-4b-it"
 collection_name = "xeno_collection"
 
 # === Google Sheets Setup ===
-def get_google_sheets_credentials():
-    credentials_json = os.environ.get("GOOGLE_SHEETS_CREDENTIALS")
-    if not credentials_json:
-        raise ValueError("GOOGLE_SHEETS_CREDENTIALS environment variable not set.")
-    credentials_dict = json.loads(credentials_json)
-    scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
-    creds = Credentials.from_service_account_info(credentials_dict, scopes=scope)
-    return creds
-
 # Authenticate
 try:
     client_gspread = gspread.authorize(get_google_sheets_credentials())
-    spreadsheet = client_gspread.open("Response_Log")
+    spreadsheet = client_gspread.open(config.SPREADSHEET_NAME)
     response_sheet = spreadsheet.sheet1
 except Exception as e:
     print(f"Error connecting to Google Sheets: {e}")
