@@ -38,12 +38,12 @@ def _generate_response_impl(context: str, question: str, chat_history: List[Dict
     prompt = f"{SYSTEM_PROMPT}\n### HISTORY ###\n{formatted_history}\n### CONTEXT ###\n{context}\n### QUESTION ###\n{question}"
     
     # Generate response
-    response = client.models.generate_content(
+    response = client.generate_content(
         model=LLM_MODEL_NAME,
-        contents=prompt
+        contents={"text": prompt}
     )
     
-    return response.text.strip()
+    return response.text
 
 
 def format_chat_history(messages: List[Dict[str, str]]) -> str:
