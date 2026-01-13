@@ -49,7 +49,7 @@ if "GEMINI_API_KEY" not in os.environ:
     print("WARNING: GEMINI_API_KEY environment variable not found.")
 
 # Initialize the client
-client = genai.Client(api_key=os.environ.get("GEMINI_API_KEY"))
+genai_client = genai.Client(api_key=os.environ.get("GEMINI_API_KEY"))
 embedding_model = "models/embedding-001"
 llm_model_name = "models/gemma-3-4b-it"
 collection_name = "xeno_collection"
@@ -363,9 +363,9 @@ def generate_xeno_response(context, question, chat_history):
         
         prompt = f"{SYSTEM_PROMPT}\n### HISTORY ###\n{formatted_history}\n### CONTEXT ###\n{context}\n### QUESTION ###\n{question}"
         
-        response = client.models.generate_content(
+        response = genai_client.models.generate_content(
             model=llm_model_name,
-            contents=prompt
+            contents={"text": prompt},
         )
         return response.text.strip()
 

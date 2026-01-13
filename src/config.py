@@ -14,7 +14,7 @@ if not GEMINI_API_KEY:
 client = genai.Client(api_key=GEMINI_API_KEY)
 
 # === Model Configuration ===
-EMBEDDING_MODEL = "models/embedding-001"
+EMBEDDING_MODEL = "text-embedding-004"
 LLM_MODEL_NAME = "models/gemma-3-4b-it"
 
 # === Database Configuration ===

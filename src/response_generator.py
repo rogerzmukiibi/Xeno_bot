@@ -40,7 +40,7 @@ def _generate_response_impl(context: str, question: str, chat_history: List[Dict
     # Generate response
     response = client.generate_content(
         model=LLM_MODEL_NAME,
-        contents=prompt
+        contents={"text": prompt}
     )
     
     return response.text
