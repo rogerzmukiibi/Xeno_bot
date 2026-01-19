@@ -9,6 +9,11 @@ services:
       - GEMINI_API_KEY=${GEMINI_API_KEY}
       - GOOGLE_SHEETS_CREDENTIALS=${GOOGLE_SHEETS_CREDENTIALS}
     volumes:
+      # Mount source code for live debugging (no rebuild needed)
+      - ./app.py:/app/app.py
+      - ./src:/app/src
+      - ./XENO_Uganda_KnowledgeBase_Advisory.json:/app/XENO_Uganda_KnowledgeBase_Advisory.json
+      # Data volumes
       - xeno_db:/tmp/xeno_db
       - chroma_cache:/root/.cache/chroma
       - ./xeno_memory.db:/app/xeno_memory.db
