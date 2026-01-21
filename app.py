@@ -42,6 +42,7 @@ from src.logger import (
     log_timing_data, 
     log_feedback
 )
+from src.knowledge_base import get_knowledge_base_data
 
 # Initialize components
 timer = PipelineTimer()
@@ -60,27 +61,7 @@ collection_name = "xeno_collection"
 # === Intent Classification System ===
 intent_classifier = IntentClassifier()
 # === Load and Clean Knowledge Base ===
-try:
-    df_kb = pd.read_json("XENO_Uganda_KnowledgeBase_Advisory.json")
-    df_kb.dropna(subset=['Content'], inplace=True)
-    
-    def prepare_documents(data):
-        documents, metadatas, ids = [], [], []
-        for item in data:
-            documents.append(f"Question: {item['Question']}\nAnswer: {item['Content']}")
-            metadatas.append({
-                "question": item["Question"],
-                "content": item["Content"],
-                "id": str(item["ID"])
-            })
-            ids.append(str(item["ID"]))
-        return documents, metadatas, ids
-
-    xeno_data_list = df_kb.to_dict('records')
-    documents, metadatas, ids = prepare_documents(xeno_data_list)
-except Exception as e:
-    print(f"Warning: Could not load JSON knowledge base: {e}")
-    documents, metadatas, ids = [], [], []
+documents, metadatas, ids = get_knowledge_base_data()
 
 # === Setup ChromaDB ===
 try:
