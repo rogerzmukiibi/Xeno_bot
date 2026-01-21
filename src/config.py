@@ -2,6 +2,7 @@
 Configuration module for XENO Bot
 Handles environment variables and application settings
 """
+
 import os
 from google import genai
 
@@ -11,7 +12,7 @@ if not GEMINI_API_KEY:
     raise ValueError("GEMINI_API_KEY environment variable not set.")
 
 # Initialize the genai client
-client = genai.Client(api_key=GEMINI_API_KEY)
+genai_client = genai.Client(api_key=GEMINI_API_KEY)
 
 # === Model Configuration ===
 EMBEDDING_MODEL = "text-embedding-004"
