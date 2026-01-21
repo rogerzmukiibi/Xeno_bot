@@ -31,7 +31,7 @@ def update_memory(config: Dict[str, Any], user_message: str, assistant_message: 
         _update_memory_impl(config, user_message, assistant_message)
 
 
-def _update_memory_impl(config: Dict[str, Any], user_message: str, assistant_message: str):
+def _update_memory_impl(config, user_message: str, assistant_message: str):
     """Internal implementation of memory update"""
     full_checkpoint = memory.get(config) or {}
     messages = full_checkpoint.get("channel_values", {}).get("messages", [])
@@ -69,7 +69,7 @@ def retrieve_memory(config: Dict[str, Any], timer=None) -> List[Dict[str, str]]:
         return _retrieve_memory_impl(config)
 
 
-def _retrieve_memory_impl(config: Dict[str, Any]) -> List[Dict[str, str]]:
+def _retrieve_memory_impl(config) -> List[Dict[str, str]]:
     """Internal implementation of memory retrieval"""
     full_checkpoint = memory.get(config) or {}
     return full_checkpoint.get("channel_values", {}).get("messages", [])

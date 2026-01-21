@@ -57,36 +57,6 @@ embedding_model = "models/embedding-001"
 llm_model_name = "models/gemma-3-4b-it"
 collection_name = "xeno_collection"
 
-
-
-# === LangGraph Memory Setup ===
-conn = sqlite3.connect("xeno_memory.db", check_same_thread=False)
-memory = SqliteSaver(conn=conn)
-
-def update_memory(config, user_message, assistant_message):
-    with timer.time_step("memory_update"):
-        full_checkpoint = memory.get(config) or {}
-        messages = full_checkpoint.get("channel_values", {}).get("messages", [])
-        
-        messages.append({"role": "user", "content": user_message})
-        messages.append({"role": "assistant", "content": assistant_message})
-        
-        checkpoint_to_save = {
-            "v": 1,
-            "id": str(uuid.uuid4()),
-            "ts": datetime.now().isoformat(),
-            "channel_values": {"messages": messages},
-            "channel_versions": {},
-            "versions_seen": {},   
-        }
-        
-        memory.put(config, checkpoint_to_save, {}, {})
-
-def retrieve_memory(config):
-    with timer.time_step("memory_retrieval"):
-        full_checkpoint = memory.get(config) or {}
-        return full_checkpoint.get("channel_values", {}).get("messages", [])
-
 # === Intent Classification System ===
 class IntentClassifier:
     def __init__(self):
@@ -233,14 +203,14 @@ def get_context_and_answer(message, history, session_id="default"):
     notes = []
     
     try:
-        # Create session config
-        config = create_session_config(session_id)
+        # Create session memory config
+        memory_config = create_session_config(session_id)
         
         # Step 1: Intent Classification
         intent, direct_response = intent_classifier.classify_intent(message)
         
         # Step 2: Memory Retrieval
-        chat_history = retrieve_memory(config)
+        chat_history = retrieve_memory(memory_config)
         
         answer = ""
         source_ids = "N/A"
@@ -292,7 +262,7 @@ def get_context_and_answer(message, history, session_id="default"):
                     notes.append(f"Error: {str(e)}")
 
         # Step 8: Memory Update
-        update_memory(config, message, answer)
+        update_memory(memory_config, message, answer)
         
         # Step 9: Response Logging
         log_response(message, answer, source_ids, knowledge_pairs, session_id)

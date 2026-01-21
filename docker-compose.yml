@@ -1,6 +1,6 @@
 services:
   xeno-bot:
-    image: rogerzmukiibi/xeno-bot:test_logs
+    image: rogerzmukiibi/xeno-bot:test_memory
     build:
       context: .
       dockerfile: Dockerfile
