@@ -1,6 +1,6 @@
 services:
   xeno-bot:
-    image: rogerzmukiibi/xeno-bot:test_memory
+    image: rogerzmukiibi/xeno-bot:test_intentClassification
     build:
       context: .
       dockerfile: Dockerfile
