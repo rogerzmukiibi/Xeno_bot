@@ -4,6 +4,7 @@ Handles environment variables and application settings
 """
 
 import os
+
 from google import genai
 
 # === API Configuration ===

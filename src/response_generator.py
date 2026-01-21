@@ -3,8 +3,8 @@ Response Generation module for XENO Bot
 Handles LLM response generation
 """
 
-import os
-from typing import List, Dict
+from typing import Dict, List
+
 from src.config import LLM_MODEL_NAME, SYSTEM_PROMPT, genai_client
 
 

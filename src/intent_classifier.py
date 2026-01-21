@@ -3,9 +3,9 @@ Intent Classification module for XENO Bot
 Handles classification of user intents (greetings, thanks, goodbye, queries)
 """
 
-import re
 import random
-from typing import Tuple, List
+import re
+from typing import List, Tuple
 
 
 class IntentClassifier:

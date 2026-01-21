@@ -3,8 +3,9 @@ Unit tests for utils module
 Tests the PipelineTimer class
 """
 
-import unittest
 import time
+import unittest
+
 from src.utils import PipelineTimer
 
 

@@ -4,17 +4,10 @@ Tests LangGraph memory operations
 """
 
 import unittest
-import os
-import sqlite3
-import tempfile
-from unittest.mock import patch, Mock, MagicMock
-from src.memory import (
-    update_memory,
-    retrieve_memory,
-    create_session_config,
-    _update_memory_impl,
-    _retrieve_memory_impl,
-)
+from unittest.mock import MagicMock, Mock, patch
+
+from src.memory import (_retrieve_memory_impl, _update_memory_impl,
+                        create_session_config, retrieve_memory, update_memory)
 
 
 class TestMemory(unittest.TestCase):

@@ -1,22 +1,20 @@
-import gradio as gr
-from typing import List, Dict
-import torch
-import uuid
 import logging
 import traceback
-import sentence_transformers.util as util
+import uuid
+from typing import List
 
-from src.utils import PipelineTimer
+import gradio as gr
+import sentence_transformers.util as util
+import torch
+
+from src.config import SIMILARITY_THRESHOLD
 from src.intent_classifier import IntentClassifier
-from src.logger import log_timing_data, log_response, log_feedback
+from src.logger import log_feedback, log_response, log_timing_data
 from src.memory import create_session_config, retrieve_memory, update_memory
-from src.vector_store import (
-    initialize_vector_store,
-    generate_embeddings,
-    process_context,
-)
-from src.config import SIMILARITY_THRESHOLD, SYSTEM_PROMPT
 from src.response_generator import generate_xeno_response
+from src.utils import PipelineTimer
+from src.vector_store import (generate_embeddings, initialize_vector_store,
+                              process_context)
 
 timer = PipelineTimer()
 intent_classifier = IntentClassifier()

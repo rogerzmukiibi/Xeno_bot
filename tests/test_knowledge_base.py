@@ -3,17 +3,16 @@ Unit tests for knowledge_base module
 Tests knowledge base loading and preparation
 """
 
-import unittest
-import pandas as pd
 import json
-import tempfile
 import os
-from unittest.mock import patch, Mock
-from src.knowledge_base import (
-    load_knowledge_base,
-    prepare_documents,
-    get_knowledge_base_data,
-)
+import tempfile
+import unittest
+from unittest.mock import patch
+
+import pandas as pd
+
+from src.knowledge_base import (get_knowledge_base_data, load_knowledge_base,
+                                prepare_documents)
 
 
 class TestKnowledgeBase(unittest.TestCase):

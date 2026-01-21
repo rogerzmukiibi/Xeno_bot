@@ -5,18 +5,16 @@ Handles Google Sheets logging for responses and timing data
 
 import json
 import os
-from datetime import datetime
-from typing import List, Tuple, Dict, Optional
 import threading
+from datetime import datetime
+from typing import Dict, List, Optional, Tuple
+
 import gspread
 from google.oauth2.service_account import Credentials
-from src.config import (
-    GOOGLE_SHEETS_CREDENTIALS_ENV,
-    SPREADSHEET_NAME,
-    RESPONSE_SHEET_INDEX,
-    TIMING_SHEET_NAME,
-    FEEDBACK_SHEET_NAME,
-)
+
+from src.config import (FEEDBACK_SHEET_NAME, GOOGLE_SHEETS_CREDENTIALS_ENV,
+                        RESPONSE_SHEET_INDEX, SPREADSHEET_NAME,
+                        TIMING_SHEET_NAME)
 
 
 def get_google_sheets_credentials() -> Credentials:

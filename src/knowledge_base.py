@@ -3,8 +3,10 @@ Knowledge Base module for XENO Bot
 Handles loading and preparing knowledge base data
 """
 
+from typing import Any, Dict, Hashable, List, Tuple
+
 import pandas as pd
-from typing import Hashable, List, Dict, Tuple, Any
+
 from src.config import KNOWLEDGE_BASE_PATH
 
 

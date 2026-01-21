@@ -4,9 +4,9 @@ Tests Google Sheets logging functionality
 """
 
 import unittest
-from datetime import datetime
-from unittest.mock import patch, Mock, MagicMock
-from src.logger import log_response, log_timing_data, _log_response_impl
+from unittest.mock import MagicMock, Mock, patch
+
+from src.logger import _log_response_impl, log_response, log_timing_data
 
 
 class TestLogger(unittest.TestCase):

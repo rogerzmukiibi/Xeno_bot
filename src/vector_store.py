@@ -3,20 +3,16 @@ Vector Store module for XENO Bot
 Handles ChromaDB vector store operations
 """
 
+from typing import Any, List, Tuple
+
 import chromadb
 import numpy as np
 import torch
 from langchain_chroma import Chroma
 from sentence_transformers import util
-from typing import List, Tuple, Any
-from src.config import (
-    genai_client,
-    COLLECTION_NAME,
-    CHROMA_DB_PATH,
-    RAG_TOP_K,
-    RAG_MAX_RESULTS,
-    EMBEDDING_MODEL,
-)
+
+from src.config import (CHROMA_DB_PATH, COLLECTION_NAME, EMBEDDING_MODEL,
+                        RAG_MAX_RESULTS, RAG_TOP_K, genai_client)
 from src.knowledge_base import get_knowledge_base_data
 
 
@@ -170,7 +166,7 @@ def _process_context_impl(
 
     for i, idx in enumerate(sorted_indices, 1):
         result = results[idx]
-        score = cosine_scores[idx]
+        cosine_scores[idx]
 
         question = result.metadata.get("question", "N/A")
         answer = result.metadata.get("content", "N/A")

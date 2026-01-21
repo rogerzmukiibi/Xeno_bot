@@ -4,17 +4,12 @@ Tests ChromaDB vector store operations
 """
 
 import unittest
-import numpy as np
-import torch
-from unittest.mock import patch, Mock, MagicMock
-from src.vector_store import (
-    generate_embeddings,
-    calculate_similarity,
-    process_context,
-    _generate_embeddings_impl,
-    _calculate_similarity_impl,
-    _process_context_impl,
-)
+from unittest.mock import MagicMock, Mock, patch
+
+from src.vector_store import (_calculate_similarity_impl,
+                              _generate_embeddings_impl, _process_context_impl,
+                              calculate_similarity, generate_embeddings,
+                              process_context)
 
 
 class TestVectorStore(unittest.TestCase):

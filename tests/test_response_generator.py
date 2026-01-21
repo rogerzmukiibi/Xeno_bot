@@ -4,12 +4,11 @@ Tests LLM response generation functionality
 """
 
 import unittest
-from unittest.mock import patch, Mock, MagicMock
-from src.response_generator import (
-    generate_xeno_response,
-    format_chat_history,
-    _generate_response_impl,
-)
+from unittest.mock import MagicMock, Mock, patch
+
+from src.response_generator import (_generate_response_impl,
+                                    format_chat_history,
+                                    generate_xeno_response)
 
 
 class TestResponseGenerator(unittest.TestCase):

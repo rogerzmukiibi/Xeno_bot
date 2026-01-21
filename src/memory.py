@@ -3,11 +3,13 @@ Memory module for XENO Bot
 Handles LangGraph memory operations using SQLite
 """
 
-import uuid
 import sqlite3
+import uuid
 from datetime import datetime
-from typing import List, Dict, Any
+from typing import Any, Dict, List
+
 from langgraph.checkpoint.sqlite import SqliteSaver
+
 from src.config import SQLITE_DB_PATH
 
 # === LangGraph Memory Setup ===

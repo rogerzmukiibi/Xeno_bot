@@ -5,6 +5,7 @@ Tests the IntentClassifier class
 
 import unittest
 from unittest.mock import Mock
+
 from src.intent_classifier import IntentClassifier
 
 
