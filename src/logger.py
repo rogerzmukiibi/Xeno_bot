@@ -6,13 +6,15 @@ import json
 import os
 from datetime import datetime
 from typing import List, Tuple, Dict, Optional
+import threading 
 import gspread
 from google.oauth2.service_account import Credentials
 from src.config import (
     GOOGLE_SHEETS_CREDENTIALS_ENV,
     SPREADSHEET_NAME,
     RESPONSE_SHEET_INDEX,
-    TIMING_SHEET_NAME
+    TIMING_SHEET_NAME,
+    FEEDBACK_SHEET_NAME
 )
 
 
@@ -44,33 +46,58 @@ def initialize_sheets():
     Returns:
         Tuple of (response_sheet, timing_sheet)
     """
-    client_gspread = gspread.authorize(get_google_sheets_credentials())
-    spreadsheet = client_gspread.open(SPREADSHEET_NAME)
-    
-    # Get response sheet
-    response_sheet = spreadsheet.get_worksheet(RESPONSE_SHEET_INDEX)
-    
+    try:
+        client_gspread = gspread.authorize(get_google_sheets_credentials())
+        spreadsheet = client_gspread.open(SPREADSHEET_NAME)
+        
+        # Get response sheet
+        response_sheet = spreadsheet.get_worksheet(RESPONSE_SHEET_INDEX)
+    except Exception as e:
+        print(f"Failed to initialize Google Sheets: {e}")
+        #TODO Create dummy sheets or handle error appropriately
+        class DummySheet:
+            def append_row(self, *args, **kwargs): pass
+            def worksheet(self, *args): return self
+            def add_worksheet(self, *args, **kwargs): return self
+        spreadsheet = DummySheet()
+        response_sheet = DummySheet()
+ 
     # Get or create timing sheet
     try:
         timing_sheet = spreadsheet.worksheet(TIMING_SHEET_NAME)
     except:
         # Create timing sheet if it doesn't exist
-        timing_sheet = spreadsheet.add_worksheet(title=TIMING_SHEET_NAME, rows="1000", cols="15")
-        # Add headers
-        headers = [
-            "Timestamp", "Session_ID", "Question", "Total_Time_MS",
-            "Intent_Classification_MS", "Memory_Retrieval_MS", "RAG_Retrieval_MS", 
-            "Embedding_Generation_MS", "Similarity_Calculation_MS", "Context_Processing_MS",
-            "LLM_Generation_MS", "Memory_Update_MS", "Logging_MS", "Error_Step", "Notes"
-        ]
-        timing_sheet.append_row(headers)
+        try:
+            timing_sheet = spreadsheet.add_worksheet(title=TIMING_SHEET_NAME, rows=1000, cols=15)
+            # Add headers
+            headers = [
+                "Timestamp", "Session_ID", "Question", "Total_Time_MS",
+                "Intent_Classification_MS", "Memory_Retrieval_MS", "RAG_Retrieval_MS", 
+                "Embedding_Generation_MS", "Similarity_Calculation_MS", "Context_Processing_MS",
+                "LLM_Generation_MS", "Memory_Update_MS", "Logging_MS", "Error_Step", "Notes"
+            ]
+            timing_sheet.append_row(headers)
+        except Exception as e:
+            print(f"Failed to create timing sheet: {e}")
+            timing_sheet = DummySheet()
     
-    return response_sheet, timing_sheet
+    # Feedback Sheet
+    try:
+        feedback_sheet = spreadsheet.worksheet(FEEDBACK_SHEET_NAME)
+    except:
+        try:
+            feedback_sheet = spreadsheet.add_worksheet(title=FEEDBACK_SHEET_NAME, rows=1000, cols=6)
+            headers = ["Timestamp", "Session_ID", "User_Message", "Bot_Response", "Rating", "Flag_Reason"]
+            feedback_sheet.append_row(headers)
+        except Exception as e:
+            print(f"Failed to create feedback sheet: {e}")
+            feedback_sheet = DummySheet()
+    
+    return response_sheet, timing_sheet, feedback_sheet
 
 
 # Initialize sheets
-response_sheet, timing_sheet = initialize_sheets()
-
+response_sheet, timing_sheet, feedback_sheet = initialize_sheets()
 
 def log_response(question: str, answer: str, source_ids: str, 
                 knowledge_pairs: List[Tuple[str, str]], session_id: str, timer=None):
@@ -163,3 +190,44 @@ def log_timing_data(question: str, session_id: str, timing_summary: Dict,
         # Fallback to local file
         with open("/tmp/timing_log.txt", "a") as f:
             f.write(f"{timestamp},{session_id},{question},{timing_summary}\n")
+
+def _log_feedback_background(row):
+    """Helper to run network request in background thread"""
+    try:
+        if feedback_sheet:
+            feedback_sheet.append_row(row)
+            print("Feedback logged successfully.")
+        else:
+            print("Feedback sheet not available.")
+    except Exception as e:
+        print(f"Failed to log feedback: {e}")
+
+def log_feedback(rating, reason, history, session_id):
+    """
+    Handles user feedback submission.
+    rating: 'Positive' or 'Negative'
+    reason: User provided text
+    history: Gradio chat history list
+    """
+    if not history or len(history) == 0:
+        return "No conversation to rate yet."
+    
+    # Get the last interaction (Gradio history is a list of lists: [[user, bot], ...])
+    last_interaction = history[-1]
+    
+    # Safety check for history format
+    if isinstance(last_interaction, list) and len(last_interaction) >= 2:
+        user_msg = last_interaction[0]
+        bot_msg = last_interaction[1]
+    else:
+        return "Error reading conversation history."
+        
+    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    
+    # Prepare row data
+    row = [timestamp, session_id, user_msg, bot_msg, rating, reason]
+    
+    # Run in thread to prevent UI blocking
+    threading.Thread(target=_log_feedback_background, args=(row,)).start()
+    
+    return f"Feedback received ({rating}). Thank you!"

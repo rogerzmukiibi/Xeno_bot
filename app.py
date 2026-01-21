@@ -22,7 +22,6 @@ import re
 from typing import Dict, List, Tuple
 import time
 from contextlib import contextmanager
-import threading  # <--- Added for non-blocking feedback logging
 import logging
 import traceback
 
@@ -38,7 +37,11 @@ from src.vector_store import (
     process_context
 )
 from src.response_generator import generate_xeno_response
-from src.logger import log_response, log_timing_data
+from src.logger import (
+    log_response, 
+    log_timing_data, 
+    log_feedback
+)
 
 # Initialize components
 timer = PipelineTimer()
@@ -54,154 +57,7 @@ embedding_model = "models/embedding-001"
 llm_model_name = "models/gemma-3-4b-it"
 collection_name = "xeno_collection"
 
-# === Google Sheets Setup ===
-def get_google_sheets_credentials():
-    credentials_json = os.environ.get("GOOGLE_SHEETS_CREDENTIALS")
-    if not credentials_json:
-        raise ValueError("GOOGLE_SHEETS_CREDENTIALS environment variable not set.")
-    credentials_dict = json.loads(credentials_json)
-    scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
-    creds = Credentials.from_service_account_info(credentials_dict, scopes=scope)
-    return creds
 
-# Authenticate
-try:
-    client_gspread = gspread.authorize(get_google_sheets_credentials())
-    spreadsheet = client_gspread.open("Response_Log")
-    response_sheet = spreadsheet.sheet1
-except Exception as e:
-    print(f"Error connecting to Google Sheets: {e}")
-    # Create dummy objects if connection fails to prevent app crash during dev
-    class DummySheet:
-        def append_row(self, *args, **kwargs): pass
-        def worksheet(self, *args): return self
-        def add_worksheet(self, *args, **kwargs): return self
-    spreadsheet = DummySheet()
-    response_sheet = DummySheet()
-
-# Setup Timing Sheet
-try:
-    timing_sheet = spreadsheet.worksheet("Timing_Log")
-except:
-    try:
-        timing_sheet = spreadsheet.add_worksheet(title="Timing_Log", rows="1000", cols="15")
-        headers = [
-            "Timestamp", "Session_ID", "Question", "Total_Time_MS",
-            "Intent_Classification_MS", "Memory_Retrieval_MS", "RAG_Retrieval_MS", 
-            "Embedding_Generation_MS", "Similarity_Calculation_MS", "Context_Processing_MS",
-            "LLM_Generation_MS", "Memory_Update_MS", "Logging_MS", "Error_Step", "Notes"
-        ]
-        timing_sheet.append_row(headers)
-    except Exception as e:
-        print(f"Could not create Timing_Log sheet: {e}")
-        timing_sheet = None
-
-# === NEW: Setup Feedback Sheet ===
-try:
-    feedback_sheet = spreadsheet.worksheet("Feedback_Log")
-except:
-    try:
-        feedback_sheet = spreadsheet.add_worksheet(title="Feedback_Log", rows="1000", cols="6")
-        headers = ["Timestamp", "Session_ID", "User_Message", "Bot_Response", "Rating", "Flag_Reason"]
-        feedback_sheet.append_row(headers)
-    except Exception as e:
-        print(f"Could not create Feedback_Log sheet: {e}")
-        feedback_sheet = None
-
-# === Logging Functions ===
-
-def log_response(question, answer, source_ids, knowledge_pairs, session_id):
-    """Original response logging function"""
-    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    knowledge_question_1 = knowledge_pairs[0][0] if len(knowledge_pairs) > 0 else "N/A"
-    knowledge_answer_1 = knowledge_pairs[0][1] if len(knowledge_pairs) > 0 else "N/A"
-    knowledge_question_2 = knowledge_pairs[1][0] if len(knowledge_pairs) > 1 else "N/A"
-    knowledge_answer_2 = knowledge_pairs[1][1] if len(knowledge_pairs) > 1 else "N/A"
-    row = [
-        timestamp, session_id, question, answer, source_ids,
-        knowledge_question_1, knowledge_answer_1, knowledge_question_2, knowledge_answer_2
-    ]
-    try:
-        response_sheet.append_row(row)
-        print(f"Logged response: {question} | Source IDs: {source_ids}")
-    except Exception as e:
-        print(f"Failed to log to Google Sheet: {e}")
-        with open("/tmp/response_log.txt", "a") as f:
-            f.write(f"{timestamp},{question},{answer},{source_ids}\n")
-
-def log_timing_data(question, session_id, timing_summary, error_step=None, notes=None):
-    """Log timing data to the timing sheet"""
-    if timing_sheet is None: return
-
-    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    step_times = timing_summary['step_times']
-    
-    row = [
-        timestamp,
-        session_id,
-        question[:100] + "..." if len(question) > 100 else question,
-        timing_summary['total_time_ms'],
-        step_times.get('intent_classification', 0),
-        step_times.get('memory_retrieval', 0),
-        step_times.get('rag_retrieval', 0),
-        step_times.get('embedding_generation', 0),
-        step_times.get('similarity_calculation', 0),
-        step_times.get('context_processing', 0),
-        step_times.get('llm_generation', 0),
-        step_times.get('memory_update', 0),
-        step_times.get('response_logging', 0),
-        error_step or "",
-        notes or ""
-    ]
-    
-    try:
-        timing_sheet.append_row(row)
-        print(f"Logged timing data: Total {timing_summary['total_time_ms']}ms")
-    except Exception as e:
-        print(f"Failed to log timing data: {e}")
-
-# === NEW: Feedback Functions ===
-
-def _log_feedback_background(row):
-    """Helper to run network request in background thread"""
-    try:
-        if feedback_sheet:
-            feedback_sheet.append_row(row)
-            print("Feedback logged successfully.")
-        else:
-            print("Feedback sheet not available.")
-    except Exception as e:
-        print(f"Failed to log feedback: {e}")
-
-def submit_feedback(rating, reason, history, session_id):
-    """
-    Handles user feedback submission.
-    rating: 'Positive' or 'Negative'
-    reason: User provided text
-    history: Gradio chat history list
-    """
-    if not history or len(history) == 0:
-        return "No conversation to rate yet."
-    
-    # Get the last interaction (Gradio history is a list of lists: [[user, bot], ...])
-    last_interaction = history[-1]
-    
-    # Safety check for history format
-    if isinstance(last_interaction, list) and len(last_interaction) >= 2:
-        user_msg = last_interaction[0]
-        bot_msg = last_interaction[1]
-    else:
-        return "Error reading conversation history."
-        
-    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    
-    # Prepare row data
-    row = [timestamp, session_id, user_msg, bot_msg, rating, reason]
-    
-    # Run in thread to prevent UI blocking
-    threading.Thread(target=_log_feedback_background, args=(row,)).start()
-    
-    return f"Feedback received ({rating}). Thank you!"
 
 # === LangGraph Memory Setup ===
 conn = sqlite3.connect("xeno_memory.db", check_same_thread=False)
@@ -531,14 +387,14 @@ def create_interface():
         # Feedback Event Listeners
         # Logic: If Thumbs Up is clicked, send 'Positive'. If Textbox is empty, reason defaults to "Good".
         thumbs_up.click(
-            fn=lambda h, s, r: submit_feedback("Positive", r if r else "Good", h, s),
+            fn=lambda h, s, r: log_feedback("Positive", r if r else "Good", h, s),
             inputs=[chatbot, session_id_box, feedback_reason],
             outputs=[feedback_status]
         )
         
         # Logic: If Thumbs Down is clicked, send 'Negative' with the content of the textbox.
         thumbs_down.click(
-            fn=lambda r, h, s: submit_feedback("Negative", r, h, s),
+            fn=lambda r, h, s: log_feedback("Negative", r, h, s),
             inputs=[feedback_reason, chatbot, session_id_box],
             outputs=[feedback_status]
         )
