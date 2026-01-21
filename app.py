@@ -27,7 +27,12 @@ import traceback
 
 # Import custom modules
 from src.utils import PipelineTimer
-from src.config import SIMILARITY_THRESHOLD, SERVER_NAME, SERVER_PORT
+from src.config import (
+    SIMILARITY_THRESHOLD,
+    SERVER_NAME,
+    SERVER_PORT,
+    SYSTEM_PROMPT
+)
 from src.memory import create_session_config, update_memory, retrieve_memory
 from src.intent_classifier import IntentClassifier
 from src.vector_store import (
@@ -60,54 +65,12 @@ collection_name = "xeno_collection"
 
 # === Intent Classification System ===
 intent_classifier = IntentClassifier()
+
 # === Load and Clean Knowledge Base ===
 documents, metadatas, ids = get_knowledge_base_data()
 
 # === Setup ChromaDB ===
-try:
-    client = chromadb.PersistentClient(path="/tmp/xeno_db")
-    try:
-        collection = client.get_collection(name=collection_name)
-        print(f"Loaded existing ChromaDB collection: {collection_name}")
-    except:
-        print(f"Creating new ChromaDB collection: {collection_name}")
-        collection = client.create_collection(name=collection_name)
-        if documents:
-            collection.add(documents=documents, metadatas=metadatas, ids=ids)
-except Exception as e:
-    print(f"Failed to initialize ChromaDB: {e}")
-    raise
-
-vector_store = Chroma(client=client, collection_name=collection_name)
-retriever = vector_store.as_retriever(search_type="similarity", search_kwargs={"k": 4})
-
-# === Prompt System ===
-SYSTEM_PROMPT = """You are a friendly XENO Support Assistant, an AI-powered helpful and professional customer service representative.
-Use only the information provided in the knowledge base context to answer user queries.
-Do not hallucinate. If context doesn't contain relevant info, say so in a calm polite manner by saying I'm sorry, I can't assist with that.
-Only use context that is clearly relevant to the user's question.
-For greetings like "hi" or "hello", respond politely without using the context.
-remember previous conversations."""
-
-# === Context Processing ===
-def process_context(results, cosine_scores, max_results=2):
-    with timer.time_step("context_processing"):
-        sorted_indices = np.argsort(cosine_scores)[::-1][:max_results]
-        formatted_context = ""
-        source_ids = []
-        knowledge_pairs = []
-        for i, idx in enumerate(sorted_indices, 1):
-            result = results[idx]
-            score = cosine_scores[idx]
-            question = result.metadata.get('question', 'N/A')
-            answer = result.metadata.get('content', 'N/A')
-            formatted_context += f"Knowledge Entry {i}:\n"
-            formatted_context += f"Q: {question}\n"
-            formatted_context += f"A: {answer}\n"
-            formatted_context += "-" * 40 + "\n"
-            source_ids.append(str(result.metadata.get('id', 'N/A')))
-            knowledge_pairs.append((question, answer))
-        return formatted_context, source_ids, knowledge_pairs
+collection, vector_store, retriever = initialize_vector_store()
 
 # === LLM Generation ===
 def generate_xeno_response(context, question, chat_history):
