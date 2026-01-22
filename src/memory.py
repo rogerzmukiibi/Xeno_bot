@@ -7,7 +7,7 @@ import sqlite3
 from datetime import datetime
 from typing import List, Dict, Any
 from langgraph.checkpoint.sqlite import SqliteSaver
-from src.config import SQLITE_DB_PATH
+from config import SQLITE_DB_PATH
 
 # === LangGraph Memory Setup ===
 conn = sqlite3.connect(SQLITE_DB_PATH, check_same_thread=False)

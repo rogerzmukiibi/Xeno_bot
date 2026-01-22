@@ -24,6 +24,81 @@ coverage.xml
 # Ignore database files
 *.db
 
+# ============================
+# Python
+# ============================
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.egg-info/
+.eggs/
+.cache/
+
+# ============================
+# Virtual Environments
+# ============================
+venv/
+.venv/
+env/
+ENV/
+
+
+# ============================
+# Environment Variables & Secrets
+# ============================
+.env
+.env.*
+*.key
+*.pem
+google_sheets_credentials.json
+
+# ============================
+# Databases (LOCAL / GENERATED)
+# ============================
+# SQLite memory
+*.db
+*.sqlite
+*.sqlite3
+
+# ChromaDB / Vector stores
+chroma_db/
+chroma/
+vector_store/
+setup_chroma/
+setup_sqlite/
+
+# ============================
+# Logs & Artifacts
+# ============================
+logs/
+*.log
+/tmp/
+*.tmp
+
+# ============================
+# OS & Editor
+# ============================
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# ============================
+# Test Coverage
+# ============================
+.coverage
+htmlcov/
+
+# ============================
+# Model / Cache Files
+# ============================
+*.bin
+*.pt
+*.ckpt
+hf_cache/
+
+
 # Ignore binary files
 *.txt
 *.bin

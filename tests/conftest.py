@@ -1,18 +1,36 @@
 """
-Pytest configuration file
+Pytest configuration file - UPDATED VERSION
 Sets up test environment and fixtures
 """
 import os
 import sys
 import pytest
 from unittest.mock import Mock, MagicMock, patch, PropertyMock
+import json
 
 # Add src to path
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
-# Set mock environment variables before importing any modules
-os.environ.setdefault('GEMINI_API_KEY', 'test-api-key-12345')
+# ==================== MOCK ENVIRONMENT VARIABLES ====================
+# Set mock environment variables for testing
+os.environ.update({
+    'GEMINI_API_KEY': 'test-api-key-12345',
+    'NEO4J_URI': 'bolt://localhost:7687',
+    'NEO4J_USER': 'neo4j',
+    'NEO4J_PASSWORD': 'test-password',
+    'GOOGLE_SHEETS_CREDENTIALS_PATH': 'test_credentials.json'
+})
 
+# ==================== MOCK DOTENV ====================
+# Mock dotenv.load_dotenv to avoid loading actual .env file
+@pytest.fixture(autouse=True)
+def mock_dotenv():
+    """Mock dotenv to avoid loading actual .env file"""
+    with patch('src.config.load_dotenv') as mock_load:
+        mock_load.return_value = True
+        yield mock_load
+
+# ==================== MOCK GOOGLE SHEETS ====================
 # Mock Google Sheets credentials
 mock_credentials = {
     "type": "service_account",
@@ -26,40 +44,60 @@ mock_credentials = {
     "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
     "client_x509_cert_url": "https://www.googleapis.com/robot/v1/metadata/x509/test"
 }
-import json
-os.environ.setdefault('GOOGLE_SHEETS_CREDENTIALS', json.dumps(mock_credentials))
 
-# Mock google.oauth2 and gspread modules before src.logger imports them
-mock_credentials_class = MagicMock()
-mock_creds_instance = MagicMock()
-mock_credentials_class.from_service_account_info = Mock(return_value=mock_creds_instance)
+# Mock file operations for Google Sheets credentials
+@pytest.fixture(autouse=True)
+def mock_file_operations():
+    """Mock file operations for Google Sheets credentials"""
+    with patch('os.path.exists') as mock_exists, \
+         patch('builtins.open', mock_open(read_data=json.dumps(mock_credentials))):
+        # Always return True for path exists
+        mock_exists.return_value = True
+        yield
+
+# ==================== MOCK GOOGLE AUTH ====================
+# Create mocks for Google authentication modules
+mock_service_account = MagicMock()
+mock_service_account.Credentials = Mock()
+mock_service_account.Credentials.from_service_account_info = Mock()
 
 mock_oauth2 = MagicMock()
-mock_oauth2.service_account.Credentials = mock_credentials_class
-sys.modules['google.oauth2'] = mock_oauth2
-sys.modules['google.oauth2.service_account'] = mock_oauth2.service_account
+mock_oauth2.service_account = mock_service_account
 
+# Patch the modules before they're imported
+sys.modules['google.oauth2'] = mock_oauth2
+sys.modules['google.oauth2.service_account'] = mock_service_account
+
+# ==================== MOCK GSPREAD ====================
 mock_gspread = MagicMock()
-mock_spreadsheet = MagicMock()
-mock_worksheet = MagicMock()
-mock_worksheet.append_row = Mock()
-mock_spreadsheet.get_worksheet = Mock(return_value=mock_worksheet)
-mock_spreadsheet.worksheet = Mock(return_value=mock_worksheet)
-mock_spreadsheet.add_worksheet = Mock(return_value=mock_worksheet)
-mock_client = MagicMock()
-mock_client.open = Mock(return_value=mock_spreadsheet)
-mock_gspread.authorize = Mock(return_value=mock_client)
 sys.modules['gspread'] = mock_gspread
 
-
+# ==================== FIXTURES ====================
 @pytest.fixture(autouse=True)
 def mock_google_sheets():
-    """Mock Google Sheets to avoid actual connections during testing"""
-    with patch('src.logger.response_sheet') as mock_response, \
-         patch('src.logger.timing_sheet') as mock_timing:
-        mock_response.append_row = Mock()
-        mock_timing.append_row = Mock()
-        yield mock_response, mock_timing
+    """
+    Mock Google Sheets to avoid actual connections during testing
+    """
+    with patch('google.oauth2.service_account.Credentials') as mock_creds_class:
+        mock_creds_instance = Mock()
+        mock_creds_class.from_service_account_info.return_value = mock_creds_instance
+        
+        with patch('gspread.authorize') as mock_authorize:
+            mock_client = Mock()
+            mock_spreadsheet = Mock()
+            mock_worksheet = Mock()
+            mock_worksheet.append_row = Mock()
+            
+            mock_spreadsheet.get_worksheet.return_value = mock_worksheet
+            mock_spreadsheet.worksheet.return_value = mock_worksheet
+            mock_client.open.return_value = mock_spreadsheet
+            mock_authorize.return_value = mock_client
+            
+            # Patch logger module's sheet objects
+            with patch('src.logger.response_sheet', new=mock_worksheet) as mock_response, \
+                 patch('src.logger.timing_sheet', new=mock_worksheet) as mock_timing:
+                
+                yield mock_response, mock_timing
 
 
 @pytest.fixture
@@ -115,3 +153,24 @@ def sample_documents():
     }
     
     return [doc1, doc2]
+
+
+@pytest.fixture(autouse=True)
+def mock_knowledge_base_path():
+    """Mock knowledge base path to always exist"""
+    with patch('os.path.exists') as mock_exists:
+        mock_exists.return_value = True
+        yield
+
+
+# ==================== CLEANUP ====================
+@pytest.fixture(autouse=True)
+def cleanup_imports():
+    """Clean up module imports between tests"""
+    original_modules = dict(sys.modules)
+    yield
+    # Remove any modules that were imported during the test
+    new_modules = set(sys.modules.keys()) - set(original_modules.keys())
+    for module in new_modules:
+        if module.startswith('src.'):
+            del sys.modules[module]
