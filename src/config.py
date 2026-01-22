@@ -4,7 +4,7 @@ Handles environment variables and application settings
 """
 import os
 import json
-import google.generativeai as genai
+from google import genai
 from dotenv import load_dotenv
 from google import genai
 
@@ -26,7 +26,7 @@ GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
 
 if GEMINI_API_KEY:
     try:
-        genai.configure(api_key=GEMINI_API_KEY)
+        client = genai.Client(api_key=GEMINI_API_KEY)
         log_status("Gemini API", True, "Configured successfully")
     except Exception as e:
         log_status("Gemini API", False, f"Configuration failed: {e}")

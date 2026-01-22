@@ -19,3 +19,4 @@ python-dateutil
 pytest>=7.0.0
 pytest-cov>=4.0.0
 pytest-mock>=0.10.0
+numpy<2
