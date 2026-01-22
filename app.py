@@ -58,7 +58,7 @@ if "GEMINI_API_KEY" not in os.environ:
 # Initialize the client
 genai_client = genai.Client(api_key=os.environ.get("GEMINI_API_KEY"))
 embedding_model = "models/embedding-001"
-llm_model_name = "models/gemini-1.5-flash"
+llm_model_name = "models/gemma-3-4b-it"
 collection_name = "xeno_collection"
 
 # === Initialize Neo4j Client ===

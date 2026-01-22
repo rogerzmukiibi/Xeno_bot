@@ -70,7 +70,7 @@ else:
 
 # ==================== MODEL CONFIGURATION ====================
 EMBEDDING_MODEL = "models/embedding-001"
-LLM_MODEL_NAME = "models/gemini-1.5-flash"  # Updated to current Gemini model
+LLM_MODEL_NAME = "models/gemma-3-4b-it"
 log_status("AI Models", True, f"LLM: {LLM_MODEL_NAME}, Embedding: {EMBEDDING_MODEL}")
 
 # ==================== DATABASE CONFIGURATION ====================
