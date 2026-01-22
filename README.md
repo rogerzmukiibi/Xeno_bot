@@ -11,7 +11,7 @@ pinned: false
 
 # ASKXENO - AI-Powered XENO Support Assistant
 ## Overview
-ASKXENO is an AI-powered customer support assistant designed to provide accurate and timely responses to queries about XENO financial services. Built with a Retrieval-Augmented Generation (RAG) pipeline, it leverages a knowledge base, intent classification, and conversation memory to deliver professional and context-aware responses. The application is deployed as a Hugging Face Space and includes performance tracking for response time analysis.
+ASKXENO is an AI-powered customer support assistant designed to provide accurate and timely responses to queries about XENO financiall services. Built with a Retrieval-Augmented Generation (RAG) pipeline, it leverages a knowledge base, intent classification, and conversation memory to deliver professional and context-aware responses. The application is deployed as a Hugging Face Space and includes performance tracking for response time analysis.
 Features
 
 Natural Language Query Handling: Responds to user questions about XENO services, including account management, transactions, platform features, and general information.
