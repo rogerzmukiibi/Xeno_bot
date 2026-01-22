@@ -99,3 +99,7 @@ htmlcov/
 hf_cache/
 
 
+# Ignore binary files
+*.txt
+*.bin
+*.exe

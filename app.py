@@ -2,6 +2,7 @@
 XENO Bot - AI-powered customer service assistant
 Main application file with Gradio interface
 """
+import os
 import uuid
 import os
 import gradio as gr
@@ -9,7 +10,7 @@ import pandas as pd
 import torch
 import numpy as np
 from sentence_transformers import util
-import google.generativeai as genai
+from google import genai
 import chromadb
 from langchain_chroma import Chroma
 import gspread
@@ -53,8 +54,9 @@ timer = PipelineTimer()
 # Ensure API Key is set
 if "GEMINI_API_KEY" not in os.environ:
     print("WARNING: GEMINI_API_KEY environment variable not found.")
-    
-genai.configure(api_key=os.environ.get("GEMINI_API_KEY"))
+
+# Initialize the client
+genai_client = genai.Client(api_key=os.environ.get("GEMINI_API_KEY"))
 embedding_model = "models/embedding-001"
 llm_model_name = "models/gemini-1.5-flash"
 collection_name = "xeno_collection"

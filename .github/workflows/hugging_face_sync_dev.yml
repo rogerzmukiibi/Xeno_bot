@@ -3,7 +3,7 @@ name: Sync to Hugging Face Space
 on:
   push:
     branches:
-      - main
+      - development
 
 jobs:
   sync:
@@ -15,7 +15,7 @@ jobs:
 
       - name: Clone Hugging Face Space
         run: |
-          git clone https://mukiibi:${{ secrets.HF_TOKEN_RON }}@huggingface.co/spaces/Sebunya/AskXeno hf_space
+          git clone https://mukiibi:${{ secrets.HF_TOKEN }}@huggingface.co/spaces/mukiibi/AskXeno hf_space
 
       - name: Sync files
         run: |

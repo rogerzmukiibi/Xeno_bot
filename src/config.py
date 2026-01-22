@@ -6,6 +6,7 @@ import os
 import json
 import google.generativeai as genai
 from dotenv import load_dotenv
+from google import genai
 
 # Load environment variables from .env file
 load_dotenv()
