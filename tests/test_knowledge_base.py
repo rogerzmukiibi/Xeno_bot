@@ -178,6 +178,18 @@ class TestKnowledgeBase(unittest.TestCase):
             for field in required_fields:
                 self.assertIn(field, metadata)
 
+    @patch("src.knowledge_base.load_knowledge_base")
+    def test_get_knowledge_base_data_with_exception(self, mock_load):
+        """Test get_knowledge_base_data handles exceptions"""
+        # Make load_knowledge_base raise an exception
+        mock_load.side_effect = Exception("File not found")
+
+        # Should raise the exception
+        with self.assertRaises(Exception) as context:
+            get_knowledge_base_data()
+
+        self.assertIn("File not found", str(context.exception))
+
 
 if __name__ == "__main__":
     unittest.main()

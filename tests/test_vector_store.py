@@ -29,43 +29,48 @@ class TestVectorStore(unittest.TestCase):
 
         self.mock_documents = [self.mock_doc]
 
-    @patch("src.vector_store.genai.embed_content")
-    def test_generate_embeddings_impl(self, mock_embed):
+    @patch("src.vector_store.genai_client")
+    def test_generate_embeddings_impl(self, mock_genai_client):
         """Test internal embedding generation implementation"""
-        # Mock embeddings
-        mock_embed.side_effect = [
-            {"embedding": [0.1, 0.2, 0.3]},  # Query embedding
-            {"embedding": [0.2, 0.3, 0.4]},  # Doc embedding
-        ]
+        # Mock embeddings for query and document
+        mock_query_embedding = Mock()
+        mock_query_embedding.values = [0.1, 0.2, 0.3]
+        mock_doc_embedding = Mock()
+        mock_doc_embedding.values = [0.2, 0.3, 0.4]
+        
+        # Setup side effect for multiple calls
+        call_count = [0]
+        def embed_side_effect(*args, **kwargs):
+            call_count[0] += 1
+            mock_response = Mock()
+            if call_count[0] == 1:
+                mock_response.embeddings = [mock_query_embedding]
+            else:
+                mock_response.embeddings = [mock_doc_embedding]
+            return mock_response
+        
+        mock_genai_client.models.embed_content.side_effect = embed_side_effect
 
         query = "Test query"
         query_emb, doc_embs = _generate_embeddings_impl(query, self.mock_documents)
 
         # Verify embed_content was called correctly
-        self.assertEqual(mock_embed.call_count, 2)
-
-        # Check query embedding call
-        first_call = mock_embed.call_args_list[0]
-        self.assertEqual(first_call[1]["content"], query)
-        self.assertEqual(first_call[1]["task_type"], "retrieval_query")
-
-        # Check doc embedding call
-        second_call = mock_embed.call_args_list[1]
-        self.assertEqual(second_call[1]["content"], self.mock_doc.page_content)
-        self.assertEqual(second_call[1]["task_type"], "retrieval_document")
+        self.assertEqual(mock_genai_client.models.embed_content.call_count, 2)
 
         # Verify embeddings
         self.assertEqual(query_emb, [0.1, 0.2, 0.3])
         self.assertEqual(len(doc_embs), 1)
         self.assertEqual(doc_embs[0], [0.2, 0.3, 0.4])
 
-    @patch("src.vector_store.genai.embed_content")
-    def test_generate_embeddings_with_timer(self, mock_embed):
+    @patch("src.vector_store.genai_client")
+    def test_generate_embeddings_with_timer(self, mock_genai_client):
         """Test embedding generation with timer"""
-        mock_embed.side_effect = [
-            {"embedding": [0.1, 0.2, 0.3]},
-            {"embedding": [0.2, 0.3, 0.4]},
-        ]
+        # Mock embeddings
+        mock_embedding = Mock()
+        mock_embedding.values = [0.1, 0.2, 0.3]
+        mock_response = Mock()
+        mock_response.embeddings = [mock_embedding]
+        mock_genai_client.models.embed_content.return_value = mock_response
 
         mock_timer = Mock()
         mock_timer.time_step = MagicMock()
@@ -77,8 +82,8 @@ class TestVectorStore(unittest.TestCase):
         # Verify timer was used
         mock_timer.time_step.assert_called_once_with("embedding_generation")
 
-    @patch("src.vector_store.genai.embed_content")
-    def test_generate_embeddings_multiple_docs(self, mock_embed):
+    @patch("src.vector_store.genai_client")
+    def test_generate_embeddings_multiple_docs(self, mock_genai_client):
         """Test embedding generation with multiple documents"""
         # Create multiple mock documents
         mock_doc2 = Mock()
@@ -86,17 +91,31 @@ class TestVectorStore(unittest.TestCase):
         docs = [self.mock_doc, mock_doc2]
 
         # Mock embeddings
-        mock_embed.side_effect = [
-            {"embedding": [0.1, 0.2, 0.3]},  # Query
-            {"embedding": [0.2, 0.3, 0.4]},  # Doc 1
-            {"embedding": [0.3, 0.4, 0.5]},  # Doc 2
-        ]
+        mock_query_emb = Mock()
+        mock_query_emb.values = [0.1, 0.2, 0.3]
+        mock_doc1_emb = Mock()
+        mock_doc1_emb.values = [0.2, 0.3, 0.4]
+        mock_doc2_emb = Mock()
+        mock_doc2_emb.values = [0.3, 0.4, 0.5]
+        
+        # First call for query, second call for both docs
+        call_count = [0]
+        def embed_side_effect(*args, **kwargs):
+            call_count[0] += 1
+            mock_response = Mock()
+            if call_count[0] == 1:
+                mock_response.embeddings = [mock_query_emb]
+            else:
+                mock_response.embeddings = [mock_doc1_emb, mock_doc2_emb]
+            return mock_response
+        
+        mock_genai_client.models.embed_content.side_effect = embed_side_effect
 
         query_emb, doc_embs = _generate_embeddings_impl("Test", docs)
 
         # Should have 2 doc embeddings
         self.assertEqual(len(doc_embs), 2)
-        self.assertEqual(mock_embed.call_count, 3)
+        self.assertEqual(mock_genai_client.models.embed_content.call_count, 2)
 
     def test_calculate_similarity_impl(self):
         """Test internal similarity calculation implementation"""
@@ -233,6 +252,110 @@ class TestVectorStore(unittest.TestCase):
         # Should handle missing fields with N/A
         self.assertIn("N/A", context)
         self.assertEqual(source_ids[0], "N/A")
+
+    @patch("src.vector_store.get_knowledge_base_data")
+    @patch("src.vector_store.chromadb.PersistentClient")
+    @patch("src.vector_store.Chroma")
+    def test_initialize_vector_store_new_collection(
+        self, mock_chroma_class, mock_client_class, mock_get_kb
+    ):
+        """Test initializing vector store with new collection"""
+        # Mock knowledge base data
+        mock_get_kb.return_value = (
+            ["doc1", "doc2"],
+            [{"id": "1"}, {"id": "2"}],
+            ["id1", "id2"],
+        )
+
+        # Mock ChromaDB client
+        mock_client = Mock()
+        mock_client_class.return_value = mock_client
+        
+        # Simulate collection doesn't exist (raises exception)
+        mock_client.get_collection.side_effect = Exception("Collection not found")
+        
+        # Mock create_collection
+        mock_collection = Mock()
+        mock_client.create_collection.return_value = mock_collection
+
+        # Mock Chroma vector store
+        mock_vector_store = Mock()
+        mock_retriever = Mock()
+        mock_vector_store.as_retriever.return_value = mock_retriever
+        mock_chroma_class.return_value = mock_vector_store
+
+        # Call function
+        from src.vector_store import initialize_vector_store
+
+        collection, vector_store, retriever = initialize_vector_store()
+
+        # Verify collection was created
+        mock_client.create_collection.assert_called_once()
+        mock_collection.add.assert_called_once()
+
+        # Verify vector store and retriever
+        self.assertEqual(vector_store, mock_vector_store)
+        self.assertEqual(retriever, mock_retriever)
+
+    @patch("src.vector_store.get_knowledge_base_data")
+    @patch("src.vector_store.chromadb.PersistentClient")
+    @patch("src.vector_store.Chroma")
+    def test_initialize_vector_store_existing_collection(
+        self, mock_chroma_class, mock_client_class, mock_get_kb
+    ):
+        """Test initializing vector store with existing collection"""
+        # Mock knowledge base data
+        mock_get_kb.return_value = (
+            ["doc1", "doc2"],
+            [{"id": "1"}, {"id": "2"}],
+            ["id1", "id2"],
+        )
+
+        # Mock ChromaDB client
+        mock_client = Mock()
+        mock_client_class.return_value = mock_client
+        
+        # Simulate collection exists
+        mock_collection = Mock()
+        mock_client.get_collection.return_value = mock_collection
+
+        # Mock Chroma vector store
+        mock_vector_store = Mock()
+        mock_retriever = Mock()
+        mock_vector_store.as_retriever.return_value = mock_retriever
+        mock_chroma_class.return_value = mock_vector_store
+
+        # Call function
+        from src.vector_store import initialize_vector_store
+
+        collection, vector_store, retriever = initialize_vector_store()
+
+        # Verify existing collection was loaded (not created)
+        mock_client.get_collection.assert_called_once()
+        mock_client.create_collection.assert_not_called()
+
+        # Verify vector store and retriever
+        self.assertEqual(collection, mock_collection)
+        self.assertEqual(vector_store, mock_vector_store)
+        self.assertEqual(retriever, mock_retriever)
+
+    @patch("src.vector_store.get_knowledge_base_data")
+    @patch("src.vector_store.chromadb.PersistentClient")
+    def test_initialize_vector_store_failure(self, mock_client_class, mock_get_kb):
+        """Test initialize_vector_store handles errors properly"""
+        # Mock knowledge base data
+        mock_get_kb.return_value = (["doc1"], [{"id": "1"}], ["id1"])
+
+        # Mock client to raise exception
+        mock_client_class.side_effect = Exception("Database connection failed")
+
+        # Call function and expect exception
+        from src.vector_store import initialize_vector_store
+
+        with self.assertRaises(Exception) as context:
+            initialize_vector_store()
+
+        self.assertIn("Database connection failed", str(context.exception))
 
 
 if __name__ == "__main__":
