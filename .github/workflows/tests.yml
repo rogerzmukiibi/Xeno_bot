@@ -2,9 +2,9 @@ name: Run Tests
 
 on:
   push:
-    branches: [ main, develop ]
+    branches: [ main, development ]
   pull_request:
-    branches: [ main, develop ]
+    branches: [ main, development ]
 
 jobs:
   test:
@@ -12,7 +12,7 @@ jobs:
     
     strategy:
       matrix:
-        python-version: ['3.11']
+        python-version: ['3.13']
     
     steps:
     - uses: actions/checkout@v3

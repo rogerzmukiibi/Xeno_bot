@@ -119,3 +119,22 @@ def sample_documents():
     }
 
     return [doc1, doc2]
+
+
+@pytest.fixture
+def mock_genai_client():
+    """Mock Google Generative AI client with new SDK structure"""
+    with patch("src.config.genai_client") as mock_client:
+        # Mock generate_content for LLM
+        mock_generate_response = Mock()
+        mock_generate_response.text = "Test response from LLM"
+        mock_client.models.generate_content.return_value = mock_generate_response
+        
+        # Mock embed_content for embeddings
+        mock_embedding = Mock()
+        mock_embedding.values = [0.1, 0.2, 0.3]
+        mock_embed_response = Mock()
+        mock_embed_response.embeddings = [mock_embedding]
+        mock_client.models.embed_content.return_value = mock_embed_response
+        
+        yield mock_client
