@@ -1,141 +1,52 @@
-import logging
-import traceback
 import uuid
 from typing import List
 
 import gradio as gr
-import sentence_transformers.util as util
-import torch
 
-from src.config import SIMILARITY_THRESHOLD
-from src.intent_classifier import IntentClassifier
-from src.logger import log_feedback, log_response, log_timing_data
-from src.memory import create_session_config, retrieve_memory, update_memory
-from src.response_generator import generate_xeno_response
-from src.utils import PipelineTimer
-from src.vector_store import (generate_embeddings, initialize_vector_store,
-                              process_context)
-
-timer = PipelineTimer()
-intent_classifier = IntentClassifier()
-collection, vector_store, retriever = initialize_vector_store()
+from src.logger import log_feedback
 
 
-def get_context_and_answer(message, history, session_id="default"):
-    # Reset timer for new request
-    timer.reset()
-    error_step = None
-    notes = []
-
-    try:
-        # Create session memory config
-        memory_config = create_session_config(session_id)
-
-        # Step 1: Intent Classification
-        intent, direct_response = intent_classifier.classify_intent(message)
-
-        # Step 2: Memory Retrieval
-        chat_history = retrieve_memory(memory_config)
-
-        answer = ""
-        source_ids = "N/A"
-        knowledge_pairs = []
-
-        if intent != "query":
-            answer = direct_response
-            notes.append(f"Simple intent: {intent}")
-        else:
-            if len(message.strip()) < 3:
-                answer = "I'd be happy to help! Could you please provide more details about what you'd like to know?"
-                notes.append("Message too short")
-            else:
-                try:
-                    # Step 3: RAG Retrieval
-                    with timer.time_step("rag_retrieval"):
-                        queried_results = retriever.invoke(message)
-
-                    # Step 4: Embedding Generation
-                    query_embedding, doc_embeddings = generate_embeddings(
-                        message, queried_results, timer
-                    )
-
-                    # Step 5: Similarity Calculation
-                    with timer.time_step("similarity_calculation"):
-                        cosine_scores = util.cos_sim(
-                            torch.tensor(query_embedding).float(),
-                            torch.tensor(doc_embeddings).float(),
-                        )[0].tolist()
-                        max_score = max(cosine_scores) if cosine_scores else 0
-
-                    if max_score < SIMILARITY_THRESHOLD:
-                        answer = "I'm sorry, I couldn't find specific information for your question. Could you try rephrasing it, or contact XENO support directly?"
-                        notes.append(f"Low similarity score: {max_score:.3f}")
-                    else:
-                        # Step 6: Context Processing
-                        context, source_ids_list, knowledge_pairs = process_context(
-                            queried_results, cosine_scores
-                        )
-
-                        # Step 7: LLM Generation
-                        answer = generate_xeno_response(context, message, chat_history)
-                        source_ids = ", ".join(source_ids_list)
-                        notes.append(f"Max similarity: {max_score:.3f}")
-
-                except Exception as e:
-                    error_step = timer.current_step or "rag_processing"
-                    print(f"Error during RAG processing: {e}")
-                    traceback.print_exc()
-                    answer = "I apologize, but I'm having a technical issue. Please try again shortly or contact XENO support."
-                    notes.append(f"Error: {str(e)}")
-
-        # Step 8: Memory Update
-        update_memory(memory_config, message, answer)
-
-        # Step 9: Response Logging
-        log_response(message, answer, source_ids, knowledge_pairs, session_id)
-
-        # Log timing data
-        timing_summary = timer.get_timing_summary()
-        log_timing_data(
-            message,
-            session_id,
-            timing_summary,
-            error_step=error_step,
-            notes="; ".join(notes) if notes else None,
-        )
-
-        return answer
-
-    except Exception as e:
-        error_step = timer.current_step or "main_pipeline"
-        logging.error(f"Error in main pipeline: {e}")
-        logging.error(traceback.format_exc())
-
-        timing_summary = timer.get_timing_summary()
-        log_timing_data(
-            message,
-            session_id,
-            timing_summary,
-            error_step=error_step,
-            notes=f"Pipeline error: {str(e)}",
-        )
-
-        return "I apologize, but I encountered an error processing your request. Please try again."
-
-
-def respond(message: str, history: List, session_id: str):
-    """Gradio's main response function"""
+def respond(
+    message: str, history: List, session_id: str, intent_classifier, retriever
+):
+    """
+    Gradio's main response function
+    
+    Args:
+        message: User's message
+        history: Chat history
+        session_id: Session identifier
+        intent_classifier: IntentClassifier instance
+        retriever: Vector store retriever instance
+    
+    Returns:
+        Tuple of (empty string for input box, updated history)
+    """
+    # Import here to avoid circular imports
+    from app import get_context_and_answer
+    
     if not session_id:
         session_id = str(uuid.uuid4())
 
-    bot_response = get_context_and_answer(message, history, session_id)
+    bot_response = get_context_and_answer(
+        message, history, session_id, intent_classifier, retriever
+    )
     history.append([message, bot_response])
 
     return "", history
 
 
-def create_interface():
-    """Create Gradio interface"""
+def create_interface(intent_classifier, retriever):
+    """
+    Create Gradio interface
+    
+    Args:
+        intent_classifier: IntentClassifier instance
+        retriever: Vector store retriever instance
+    
+    Returns:
+        Gradio Blocks interface
+    """
     with gr.Blocks(theme=gr.themes.Soft()) as demo:
         gr.Markdown("""
         # ASKXENO
@@ -195,8 +106,16 @@ def create_interface():
         )
         # =============================
 
-        # Chat Event Listeners
-        send_button.click(respond, [msg, chatbot, session_id_box], [msg, chatbot])
-        msg.submit(respond, [msg, chatbot, session_id_box], [msg, chatbot])
+        # Chat Event Listeners - Pass components to respond function
+        send_button.click(
+            lambda msg, chat, sid: respond(msg, chat, sid, intent_classifier, retriever),
+            [msg, chatbot, session_id_box],
+            [msg, chatbot],
+        )
+        msg.submit(
+            lambda msg, chat, sid: respond(msg, chat, sid, intent_classifier, retriever),
+            [msg, chatbot, session_id_box],
+            [msg, chatbot],
+        )
 
     return demo
