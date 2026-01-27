@@ -2,7 +2,9 @@
 Configuration module for XENO Bot
 Handles environment variables and application settings
 """
+
 import os
+
 from google import genai
 
 # === API Configuration ===
@@ -11,7 +13,7 @@ if not GEMINI_API_KEY:
     raise ValueError("GEMINI_API_KEY environment variable not set.")
 
 # Initialize the genai client
-client = genai.Client(api_key=GEMINI_API_KEY)
+genai_client = genai.Client(api_key=GEMINI_API_KEY)
 
 # === Model Configuration ===
 EMBEDDING_MODEL = "text-embedding-004"
@@ -30,6 +32,7 @@ GOOGLE_SHEETS_CREDENTIALS_ENV = "GOOGLE_SHEETS_CREDENTIALS"
 SPREADSHEET_NAME = "Response_Log"
 RESPONSE_SHEET_INDEX = 0  # sheet1
 TIMING_SHEET_NAME = "Timing_Log"
+FEEDBACK_SHEET_NAME = "Feedback_Log"
 
 # === RAG Configuration ===
 RAG_TOP_K = 4

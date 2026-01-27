@@ -1,5 +1,6 @@
 services:
   xeno-bot:
+    image: rogerzmukiibi/xeno-bot:test_v1
     build:
       context: .
       dockerfile: Dockerfile
