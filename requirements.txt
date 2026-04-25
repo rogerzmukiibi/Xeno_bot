@@ -5,13 +5,11 @@ pandas
 torch>=2.3.1
 numpy
 sentence-transformers
-google-genai
+transformers
 chromadb
 langgraph
 langgraph-checkpoint-sqlite
 langchain-chroma
-gspread
-google-auth
 
 python-dateutil
 

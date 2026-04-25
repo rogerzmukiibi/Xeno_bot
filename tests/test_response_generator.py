@@ -58,29 +58,33 @@ A: Visit our website and click Sign Up.
         self.assertIn("User:", formatted)
         self.assertIn("Unknown:", formatted)
 
-    @patch("src.response_generator.genai_client")
-    def test_generate_response_impl(self, mock_genai_client):
+    @patch("src.response_generator.get_text_generator")
+    def test_generate_response_impl(self, mock_get_generator):
         """Test internal response generation implementation"""
-        # Configure mock response
-        mock_genai_client.models.generate_content.return_value.text = "You can create an account by visiting our website."
+        mock_generator = Mock()
+        mock_generator.return_value = [
+            {"generated_text": "You can create an account by visiting our website."}
+        ]
+        mock_get_generator.return_value = mock_generator
 
         response = _generate_response_impl(
             self.context, self.question, self.chat_history
         )
 
-        # Verify generate_content was called with model and content
-        mock_genai_client.models.generate_content.assert_called_once()
-        call_kwargs = mock_genai_client.models.generate_content.call_args[1]
-        self.assertIn("model", call_kwargs)
-        self.assertIn("contents", call_kwargs)
+        # Verify local transformers generator call
+        mock_generator.assert_called_once()
+        call_args = mock_generator.call_args[0]
+        self.assertTrue(len(call_args) >= 1)
 
         # Check response
         self.assertEqual(response, "You can create an account by visiting our website.")
 
-    @patch("src.response_generator.genai_client")
-    def test_generate_response_with_empty_history(self, mock_genai_client):
+    @patch("src.response_generator.get_text_generator")
+    def test_generate_response_with_empty_history(self, mock_get_generator):
         """Test generating response with empty history"""
-        mock_genai_client.models.generate_content.return_value.text = "Test response"
+        mock_generator = Mock()
+        mock_generator.return_value = [{"generated_text": "Test response"}]
+        mock_get_generator.return_value = mock_generator
 
         response = _generate_response_impl(self.context, self.question, [])
 
@@ -88,20 +92,20 @@ A: Visit our website and click Sign Up.
         self.assertEqual(response, "Test response")
 
         # Check that "None" was used for history in prompt
-        call_kwargs = mock_genai_client.models.generate_content.call_args[1]
-        prompt = call_kwargs["contents"]
+        prompt = mock_generator.call_args[0][0]
         self.assertIn("None", prompt)
 
-    @patch("src.response_generator.genai_client")
-    def test_prompt_structure(self, mock_genai_client):
+    @patch("src.response_generator.get_text_generator")
+    def test_prompt_structure(self, mock_get_generator):
         """Test that prompt includes all necessary components"""
-        mock_genai_client.models.generate_content.return_value.text = "Test response"
+        mock_generator = Mock()
+        mock_generator.return_value = [{"generated_text": "Test response"}]
+        mock_get_generator.return_value = mock_generator
 
         _generate_response_impl(self.context, self.question, self.chat_history)
 
         # Get the prompt that was sent
-        call_kwargs = mock_genai_client.models.generate_content.call_args[1]
-        prompt = call_kwargs["contents"]
+        prompt = mock_generator.call_args[0][0]
 
         # Verify prompt structure
         self.assertIn("HISTORY", prompt)
@@ -110,10 +114,12 @@ A: Visit our website and click Sign Up.
         self.assertIn(self.context, prompt)
         self.assertIn(self.question, prompt)
 
-    @patch("src.response_generator.genai_client")
-    def test_generate_xeno_response_with_timer(self, mock_genai_client):
+    @patch("src.response_generator.get_text_generator")
+    def test_generate_xeno_response_with_timer(self, mock_get_generator):
         """Test generate_xeno_response with timer"""
-        mock_genai_client.models.generate_content.return_value.text = "Test response"
+        mock_generator = Mock()
+        mock_generator.return_value = [{"generated_text": "Test response"}]
+        mock_get_generator.return_value = mock_generator
 
         mock_timer = Mock()
         mock_timer.time_step = MagicMock()
@@ -130,26 +136,29 @@ A: Visit our website and click Sign Up.
         # Verify response
         self.assertEqual(response, "Test response")
 
-    @patch("src.response_generator.genai_client")
-    def test_response_text_stripping(self, mock_genai_client):
+    @patch("src.response_generator.get_text_generator")
+    def test_response_text_stripping(self, mock_get_generator):
         """Test that response text is stripped of whitespace"""
-        mock_genai_client.models.generate_content.return_value.text = "Test response with spaces"
+        mock_generator = Mock()
+        mock_generator.return_value = [{"generated_text": "  Test response with spaces  "}]
+        mock_get_generator.return_value = mock_generator
 
         response = _generate_response_impl(self.context, self.question, [])
 
-        # Response should be returned as-is from mock
+        # Response should be stripped
         self.assertEqual(response, "Test response with spaces")
 
-    @patch("src.response_generator.genai_client")
-    def test_system_prompt_inclusion(self, mock_genai_client):
+    @patch("src.response_generator.get_text_generator")
+    def test_system_prompt_inclusion(self, mock_get_generator):
         """Test that system prompt is included in generated prompt"""
-        mock_genai_client.models.generate_content.return_value.text = "Test"
+        mock_generator = Mock()
+        mock_generator.return_value = [{"generated_text": "Test"}]
+        mock_get_generator.return_value = mock_generator
 
         _generate_response_impl(self.context, self.question, [])
 
         # Get the prompt
-        call_kwargs = mock_genai_client.models.generate_content.call_args[1]
-        prompt = call_kwargs["contents"]
+        prompt = mock_generator.call_args[0][0]
 
         # Should contain system prompt text
         self.assertIn("XENO Support Assistant", prompt)

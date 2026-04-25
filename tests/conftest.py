@@ -5,76 +5,15 @@ Sets up test environment and fixtures
 
 import os
 import sys
-from unittest.mock import MagicMock, Mock, patch
+from unittest.mock import Mock, patch
 
 import pytest
 
 # Add src to path
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-# Set mock environment variables before importing any modules
-os.environ.setdefault("GEMINI_API_KEY", "test-api-key-12345")
-
-# Mock Google Sheets credentials
-mock_credentials = {
-    "type": "service_account",
-    "project_id": "test-project",
-    "private_key_id": "test-key-id",
-    "private_key": "-----BEGIN PRIVATE KEY-----\ntest\n-----END PRIVATE KEY-----\n",
-    "client_email": "test@test.iam.gserviceaccount.com",
-    "client_id": "12345",
-    "auth_uri": "https://accounts.google.com/o/oauth2/auth",
-    "token_uri": "https://oauth2.googleapis.com/token",
-    "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
-    "client_x509_cert_url": "https://www.googleapis.com/robot/v1/metadata/x509/test",
-}
-import json
-
-os.environ.setdefault("GOOGLE_SHEETS_CREDENTIALS", json.dumps(mock_credentials))
-
-# Mock google.oauth2 and gspread modules before src.logger imports them
-mock_credentials_class = MagicMock()
-mock_creds_instance = MagicMock()
-mock_credentials_class.from_service_account_info = Mock(
-    return_value=mock_creds_instance
-)
-
-mock_oauth2 = MagicMock()
-mock_oauth2.service_account.Credentials = mock_credentials_class
-sys.modules["google.oauth2"] = mock_oauth2
-sys.modules["google.oauth2.service_account"] = mock_oauth2.service_account
-
-mock_gspread = MagicMock()
-mock_spreadsheet = MagicMock()
-mock_worksheet = MagicMock()
-mock_worksheet.append_row = Mock()
-mock_spreadsheet.get_worksheet = Mock(return_value=mock_worksheet)
-mock_spreadsheet.worksheet = Mock(return_value=mock_worksheet)
-mock_spreadsheet.add_worksheet = Mock(return_value=mock_worksheet)
-mock_client = MagicMock()
-mock_client.open = Mock(return_value=mock_spreadsheet)
-mock_gspread.authorize = Mock(return_value=mock_client)
-sys.modules["gspread"] = mock_gspread
-
-
-@pytest.fixture(autouse=True)
-def mock_google_sheets():
-    """Mock Google Sheets to avoid actual connections during testing"""
-    with patch("src.logger.response_sheet") as mock_response, patch(
-        "src.logger.timing_sheet"
-    ) as mock_timing:
-        mock_response.append_row = Mock()
-        mock_timing.append_row = Mock()
-        yield mock_response, mock_timing
-
-
-@pytest.fixture
-def mock_genai():
-    """Mock Google Generative AI"""
-    with patch("google.generativeai.configure") as mock_config, patch(
-        "google.generativeai.GenerativeModel"
-    ) as mock_model, patch("google.generativeai.embed_content") as mock_embed:
-        yield {"configure": mock_config, "model": mock_model, "embed": mock_embed}
+# Default local model runtime endpoint for tests.
+os.environ.setdefault("OLLAMA_BASE_URL", "http://localhost:11434")
 
 
 @pytest.fixture
@@ -121,20 +60,3 @@ def sample_documents():
     return [doc1, doc2]
 
 
-@pytest.fixture
-def mock_genai_client():
-    """Mock Google Generative AI client with new SDK structure"""
-    with patch("src.config.genai_client") as mock_client:
-        # Mock generate_content for LLM
-        mock_generate_response = Mock()
-        mock_generate_response.text = "Test response from LLM"
-        mock_client.models.generate_content.return_value = mock_generate_response
-        
-        # Mock embed_content for embeddings
-        mock_embedding = Mock()
-        mock_embedding.values = [0.1, 0.2, 0.3]
-        mock_embed_response = Mock()
-        mock_embed_response.embeddings = [mock_embedding]
-        mock_client.models.embed_content.return_value = mock_embed_response
-        
-        yield mock_client

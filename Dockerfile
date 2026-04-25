@@ -1,5 +1,5 @@
 # Use official Python runtime as base image
-FROM python:3.11-slim
+FROM python:3.13-slim
 
 # Set working directory
 WORKDIR /app
@@ -9,6 +9,9 @@ ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
     GRADIO_SERVER_NAME="0.0.0.0" \
     GRADIO_SERVER_PORT=7860 \
+    LLM_MODEL_NAME="google/gemma-2-2b-it" \
+    LLM_TIMEOUT_SECONDS=90 \
+    CHAT_LOG_DIR="/app/chats" \
     PIP_DEFAULT_TIMEOUT=100 \
     PIP_RETRIES=5
 
@@ -24,8 +27,6 @@ COPY requirements.txt .
 # Upgrade pip and install dependencies with retries
 RUN pip install --upgrade pip setuptools wheel && \
     pip install --no-cache-dir --default-timeout=100 --prefer-binary \
-        torch==2.3.1+cpu --index-url https://download.pytorch.org/whl/cpu && \
-    pip install --no-cache-dir --default-timeout=100 --prefer-binary \
         -r requirements.txt --extra-index-url https://download.pytorch.org/whl/cpu
 
 # Copy project files
@@ -34,7 +35,7 @@ COPY src/ ./src/
 COPY XENO_Uganda_KnowledgeBase_Advisory.json ./
 
 # Create necessary directories
-RUN mkdir -p /tmp/xeno_db
+RUN mkdir -p /tmp/xeno_db /app/chats
 
 # Expose Gradio port
 EXPOSE 7860

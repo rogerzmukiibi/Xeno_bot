@@ -3,17 +3,41 @@ Vector Store module for XENO Bot
 Handles ChromaDB vector store operations
 """
 
-from typing import Any, List, Tuple
+from typing import Any, List, Tuple, cast
 
 import chromadb
 import numpy as np
 import torch
 from langchain_chroma import Chroma
-from sentence_transformers import util
+from sentence_transformers import SentenceTransformer, util
 
 from src.config import (CHROMA_DB_PATH, COLLECTION_NAME, EMBEDDING_MODEL,
-                        RAG_MAX_RESULTS, RAG_TOP_K, genai_client)
+                        RAG_MAX_RESULTS, RAG_TOP_K)
 from src.knowledge_base import get_knowledge_base_data
+
+
+_embedding_model = None
+
+
+def get_embedding_model() -> SentenceTransformer:
+    """Lazily load and cache the local embedding model."""
+    global _embedding_model
+    if _embedding_model is None:
+        _embedding_model = SentenceTransformer(EMBEDDING_MODEL)
+    return _embedding_model
+
+
+def encode_documents_for_collection(documents: List[str]) -> List[List[float]]:
+    """Encode knowledge-base documents for persistent Chroma storage."""
+    if not documents:
+        return []
+
+    encoded = get_embedding_model().encode(documents)
+    if hasattr(encoded, "ndim") and encoded.ndim == 1:
+        return [cast(List[float], encoded.tolist())]
+    if hasattr(encoded, "tolist"):
+        return cast(List[List[float]], encoded.tolist())
+    return cast(List[List[float]], [list(item) for item in encoded])
 
 
 def initialize_vector_store() -> Tuple[chromadb.Collection, Chroma, Any]:
@@ -37,8 +61,17 @@ def initialize_vector_store() -> Tuple[chromadb.Collection, Chroma, Any]:
         except:
             # Create new collection if it doesn't exist
             print(f"Creating new ChromaDB collection: {COLLECTION_NAME}")
-            collection = client.create_collection(name=COLLECTION_NAME)
-            collection.add(documents=documents, metadatas=metadatas, ids=ids)
+            collection = client.create_collection(
+                name=COLLECTION_NAME,
+                metadata={"embedding_model": EMBEDDING_MODEL},
+            )
+            if documents:
+                collection.add(
+                    documents=documents,
+                    metadatas=metadatas,
+                    ids=ids,
+                    embeddings=encode_documents_for_collection(documents),
+                )
 
         # Create vector store and retriever
         vector_store = Chroma(client=client, collection_name=COLLECTION_NAME)
@@ -78,21 +111,31 @@ def _generate_embeddings_impl(
     query: str, documents: List[Any]
 ) -> Tuple[List[float], List[List[float]]]:
     """Internal implementation of embedding generation"""
-    # 1. Update query embedding access
-    query_result = genai_client.models.embed_content(
-        model=EMBEDDING_MODEL, contents=query
-    )
-    # The SDK returns an EmbedContentResponse object with an 'embeddings' attribute
-    query_embedding = query_result.embeddings[0].values
+    model = get_embedding_model()
 
-    # 2. Update document embeddings access
+    query_embedding = model.encode(query)
+    if hasattr(query_embedding, "tolist"):
+        query_embedding = query_embedding.tolist()
+    query_embedding = cast(List[float], query_embedding)
+
     doc_contents = [doc.page_content for doc in documents]
-    doc_results = genai_client.models.embed_content(
-        model=EMBEDDING_MODEL, contents=doc_contents
-    )
+    if not doc_contents:
+        return query_embedding, []
 
-    # Map the list of embedding objects to a list of vector values
-    doc_embeddings = [e.values for e in doc_results.embeddings]
+    doc_matrix = model.encode(doc_contents)
+
+    # Convert model output to list[list[float]] while handling one/many documents.
+    if hasattr(doc_matrix, "ndim") and doc_matrix.ndim == 1:
+        doc_embeddings = [doc_matrix.tolist()]
+    elif hasattr(doc_matrix, "tolist"):
+        doc_embeddings = doc_matrix.tolist()
+    else:
+        doc_embeddings = [list(embedding) for embedding in doc_matrix]
+
+    if doc_embeddings and isinstance(doc_embeddings[0], float):
+        doc_embeddings = [doc_embeddings]
+
+    doc_embeddings = cast(List[List[float]], doc_embeddings)
 
     return query_embedding, doc_embeddings
 

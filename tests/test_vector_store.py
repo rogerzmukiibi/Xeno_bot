@@ -29,48 +29,37 @@ class TestVectorStore(unittest.TestCase):
 
         self.mock_documents = [self.mock_doc]
 
-    @patch("src.vector_store.genai_client")
-    def test_generate_embeddings_impl(self, mock_genai_client):
+    @patch("src.vector_store.get_embedding_model")
+    def test_generate_embeddings_impl(self, mock_get_embedding_model):
         """Test internal embedding generation implementation"""
-        # Mock embeddings for query and document
-        mock_query_embedding = Mock()
-        mock_query_embedding.values = [0.1, 0.2, 0.3]
-        mock_doc_embedding = Mock()
-        mock_doc_embedding.values = [0.2, 0.3, 0.4]
-        
-        # Setup side effect for multiple calls
-        call_count = [0]
-        def embed_side_effect(*args, **kwargs):
-            call_count[0] += 1
-            mock_response = Mock()
-            if call_count[0] == 1:
-                mock_response.embeddings = [mock_query_embedding]
-            else:
-                mock_response.embeddings = [mock_doc_embedding]
-            return mock_response
-        
-        mock_genai_client.models.embed_content.side_effect = embed_side_effect
+        mock_model = Mock()
+        mock_model.encode.side_effect = [
+            [0.1, 0.2, 0.3],
+            [[0.2, 0.3, 0.4]],
+        ]
+        mock_get_embedding_model.return_value = mock_model
 
         query = "Test query"
         query_emb, doc_embs = _generate_embeddings_impl(query, self.mock_documents)
 
-        # Verify embed_content was called correctly
-        self.assertEqual(mock_genai_client.models.embed_content.call_count, 2)
+        # Verify encode was called for query and docs
+        self.assertEqual(mock_model.encode.call_count, 2)
 
         # Verify embeddings
         self.assertEqual(query_emb, [0.1, 0.2, 0.3])
         self.assertEqual(len(doc_embs), 1)
         self.assertEqual(doc_embs[0], [0.2, 0.3, 0.4])
 
-    @patch("src.vector_store.genai_client")
-    def test_generate_embeddings_with_timer(self, mock_genai_client):
+    @patch("src.vector_store.get_embedding_model")
+    def test_generate_embeddings_with_timer(self, mock_get_embedding_model):
         """Test embedding generation with timer"""
         # Mock embeddings
-        mock_embedding = Mock()
-        mock_embedding.values = [0.1, 0.2, 0.3]
-        mock_response = Mock()
-        mock_response.embeddings = [mock_embedding]
-        mock_genai_client.models.embed_content.return_value = mock_response
+        mock_model = Mock()
+        mock_model.encode.side_effect = [
+            [0.1, 0.2, 0.3],
+            [[0.1, 0.2, 0.3]],
+        ]
+        mock_get_embedding_model.return_value = mock_model
 
         mock_timer = Mock()
         mock_timer.time_step = MagicMock()
@@ -82,8 +71,8 @@ class TestVectorStore(unittest.TestCase):
         # Verify timer was used
         mock_timer.time_step.assert_called_once_with("embedding_generation")
 
-    @patch("src.vector_store.genai_client")
-    def test_generate_embeddings_multiple_docs(self, mock_genai_client):
+    @patch("src.vector_store.get_embedding_model")
+    def test_generate_embeddings_multiple_docs(self, mock_get_embedding_model):
         """Test embedding generation with multiple documents"""
         # Create multiple mock documents
         mock_doc2 = Mock()
@@ -91,31 +80,31 @@ class TestVectorStore(unittest.TestCase):
         docs = [self.mock_doc, mock_doc2]
 
         # Mock embeddings
-        mock_query_emb = Mock()
-        mock_query_emb.values = [0.1, 0.2, 0.3]
-        mock_doc1_emb = Mock()
-        mock_doc1_emb.values = [0.2, 0.3, 0.4]
-        mock_doc2_emb = Mock()
-        mock_doc2_emb.values = [0.3, 0.4, 0.5]
-        
-        # First call for query, second call for both docs
-        call_count = [0]
-        def embed_side_effect(*args, **kwargs):
-            call_count[0] += 1
-            mock_response = Mock()
-            if call_count[0] == 1:
-                mock_response.embeddings = [mock_query_emb]
-            else:
-                mock_response.embeddings = [mock_doc1_emb, mock_doc2_emb]
-            return mock_response
-        
-        mock_genai_client.models.embed_content.side_effect = embed_side_effect
+        mock_model = Mock()
+        mock_model.encode.side_effect = [
+            [0.1, 0.2, 0.3],
+            [[0.2, 0.3, 0.4], [0.3, 0.4, 0.5]],
+        ]
+        mock_get_embedding_model.return_value = mock_model
 
         query_emb, doc_embs = _generate_embeddings_impl("Test", docs)
 
         # Should have 2 doc embeddings
         self.assertEqual(len(doc_embs), 2)
-        self.assertEqual(mock_genai_client.models.embed_content.call_count, 2)
+        self.assertEqual(mock_model.encode.call_count, 2)
+
+    @patch("src.vector_store.get_embedding_model")
+    def test_generate_embeddings_empty_documents(self, mock_get_embedding_model):
+        """Test embedding generation when no documents are retrieved"""
+        mock_model = Mock()
+        mock_model.encode.return_value = [0.1, 0.2, 0.3]
+        mock_get_embedding_model.return_value = mock_model
+
+        query_emb, doc_embs = _generate_embeddings_impl("Test", [])
+
+        self.assertEqual(query_emb, [0.1, 0.2, 0.3])
+        self.assertEqual(doc_embs, [])
+        mock_model.encode.assert_called_once_with("Test")
 
     def test_calculate_similarity_impl(self):
         """Test internal similarity calculation implementation"""

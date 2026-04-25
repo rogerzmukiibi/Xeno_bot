@@ -8,7 +8,8 @@ import os
 import traceback
 
 from src.config import (COLLECTION_NAME, EMBEDDING_MODEL, LLM_MODEL_NAME,
-                        SERVER_NAME, SERVER_PORT, SIMILARITY_THRESHOLD)
+                        HF_TOKEN, SERVER_NAME, SERVER_PORT,
+                        SIMILARITY_THRESHOLD)
 from src.intent_classifier import IntentClassifier
 from src.interface import create_interface
 from src.knowledge_base import get_knowledge_base_data
@@ -21,9 +22,12 @@ from src.vector_store import (generate_embeddings, initialize_vector_store,
                               process_context)
 
 # === Configuration ===
-# Ensure API Key is set
-if "GEMINI_API_KEY" not in os.environ:
-    print("WARNING: GEMINI_API_KEY environment variable not found.")
+# Warn when HF_TOKEN is absent for potentially gated models.
+if not HF_TOKEN:
+    print(
+        "WARNING: HF_TOKEN environment variable not found. "
+        "If the selected model is gated, model loading may fail."
+    )
 
 # Initialize the client
 embedding_model = EMBEDDING_MODEL

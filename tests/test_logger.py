@@ -1,6 +1,6 @@
 """
 Unit tests for logger module
-Tests Google Sheets logging functionality
+Tests CSV logging functionality
 """
 
 import unittest
@@ -23,8 +23,8 @@ class TestLogger(unittest.TestCase):
         ]
         self.session_id = "test_session_123"
 
-    @patch("src.logger.response_sheet")
-    def test_log_response_impl(self, mock_sheet):
+    @patch("src.logger._append_csv_row")
+    def test_log_response_impl(self, mock_append):
         """Test internal response logging implementation"""
         _log_response_impl(
             self.question,
@@ -34,12 +34,12 @@ class TestLogger(unittest.TestCase):
             self.session_id,
         )
 
-        # Verify append_row was called
-        mock_sheet.append_row.assert_called_once()
+        # Verify CSV append was called
+        mock_append.assert_called_once()
 
         # Check the row data
-        call_args = mock_sheet.append_row.call_args
-        row = call_args[0][0]
+        call_args = mock_append.call_args
+        row = call_args[0][2]
 
         # Verify row structure
         self.assertEqual(
@@ -54,8 +54,8 @@ class TestLogger(unittest.TestCase):
         self.assertEqual(row[7], "Question 2?")
         self.assertEqual(row[8], "Answer 2.")
 
-    @patch("src.logger.response_sheet")
-    def test_log_response_with_timer(self, mock_sheet):
+    @patch("src.logger._append_csv_row")
+    def test_log_response_with_timer(self, mock_append):
         """Test log_response with timer"""
         mock_timer = Mock()
         mock_timer.time_step = MagicMock()
@@ -74,23 +74,23 @@ class TestLogger(unittest.TestCase):
         # Verify timer was used
         mock_timer.time_step.assert_called_once_with("response_logging")
 
-    @patch("src.logger.response_sheet")
-    def test_log_response_empty_knowledge_pairs(self, mock_sheet):
+    @patch("src.logger._append_csv_row")
+    def test_log_response_empty_knowledge_pairs(self, mock_append):
         """Test logging with empty knowledge pairs"""
         _log_response_impl(
             self.question, self.answer, self.source_ids, [], self.session_id
         )
 
         # Should still work
-        mock_sheet.append_row.assert_called_once()
+        mock_append.assert_called_once()
 
         # Check that N/A is used for missing pairs
-        row = mock_sheet.append_row.call_args[0][0]
+        row = mock_append.call_args[0][2]
         self.assertEqual(row[5], "N/A")
         self.assertEqual(row[6], "N/A")
 
-    @patch("src.logger.response_sheet")
-    def test_log_response_single_knowledge_pair(self, mock_sheet):
+    @patch("src.logger._append_csv_row")
+    def test_log_response_single_knowledge_pair(self, mock_append):
         """Test logging with single knowledge pair"""
         single_pair = [("Single question?", "Single answer.")]
 
@@ -98,7 +98,7 @@ class TestLogger(unittest.TestCase):
             self.question, self.answer, self.source_ids, single_pair, self.session_id
         )
 
-        row = mock_sheet.append_row.call_args[0][0]
+        row = mock_append.call_args[0][2]
 
         # First pair should be present
         self.assertEqual(row[5], "Single question?")
@@ -108,18 +108,11 @@ class TestLogger(unittest.TestCase):
         self.assertEqual(row[7], "N/A")
         self.assertEqual(row[8], "N/A")
 
-    @patch("src.logger.response_sheet")
-    @patch("builtins.open", create=True)
-    def test_log_response_fallback_on_error(self, mock_open, mock_sheet):
-        """Test fallback to file logging on error"""
-        # Make append_row raise an exception
-        mock_sheet.append_row.side_effect = Exception("Connection error")
+    @patch("src.logger._append_csv_row")
+    def test_log_response_append_error_is_handled(self, mock_append):
+        """Test that append errors do not break response logging"""
+        mock_append.side_effect = Exception("Write error")
 
-        # Mock file operations
-        mock_file = MagicMock()
-        mock_open.return_value.__enter__.return_value = mock_file
-
-        # Should not raise exception
         _log_response_impl(
             self.question,
             self.answer,
@@ -128,12 +121,8 @@ class TestLogger(unittest.TestCase):
             self.session_id,
         )
 
-        # Verify fallback file was opened
-        mock_open.assert_called_once_with("/tmp/response_log.txt", "a")
-        mock_file.write.assert_called_once()
-
-    @patch("src.logger.timing_sheet")
-    def test_log_timing_data(self, mock_sheet):
+    @patch("src.logger._append_csv_row")
+    def test_log_timing_data(self, mock_append):
         """Test timing data logging"""
         timing_summary = {
             "total_time_ms": 1500,
@@ -158,11 +147,11 @@ class TestLogger(unittest.TestCase):
             notes="Test note",
         )
 
-        # Verify append_row was called
-        mock_sheet.append_row.assert_called_once()
+        # Verify CSV append was called
+        mock_append.assert_called_once()
 
         # Check row structure
-        row = mock_sheet.append_row.call_args[0][0]
+        row = mock_append.call_args[0][2]
 
         # Should have 15 fields
         self.assertEqual(len(row), 15)
@@ -172,8 +161,8 @@ class TestLogger(unittest.TestCase):
         self.assertEqual(row[5], 100)  # memory_retrieval
         self.assertEqual(row[14], "Test note")  # notes
 
-    @patch("src.logger.timing_sheet")
-    def test_log_timing_data_with_error(self, mock_sheet):
+    @patch("src.logger._append_csv_row")
+    def test_log_timing_data_with_error(self, mock_append):
         """Test timing data logging with error"""
         timing_summary = {
             "total_time_ms": 500,
@@ -188,14 +177,14 @@ class TestLogger(unittest.TestCase):
             notes="Error occurred",
         )
 
-        row = mock_sheet.append_row.call_args[0][0]
+        row = mock_append.call_args[0][2]
 
         # Check error_step is logged
         self.assertEqual(row[13], "rag_retrieval")
         self.assertEqual(row[14], "Error occurred")
 
-    @patch("src.logger.timing_sheet")
-    def test_log_timing_data_missing_steps(self, mock_sheet):
+    @patch("src.logger._append_csv_row")
+    def test_log_timing_data_missing_steps(self, mock_append):
         """Test timing data with missing step times"""
         timing_summary = {
             "total_time_ms": 100,
@@ -207,14 +196,14 @@ class TestLogger(unittest.TestCase):
 
         log_timing_data(self.question, self.session_id, timing_summary)
 
-        row = mock_sheet.append_row.call_args[0][0]
+        row = mock_append.call_args[0][2]
 
         # Missing steps should default to 0
         self.assertEqual(row[5], 0)  # memory_retrieval
         self.assertEqual(row[6], 0)  # rag_retrieval
 
-    @patch("src.logger.timing_sheet")
-    def test_log_timing_data_long_question(self, mock_sheet):
+    @patch("src.logger._append_csv_row")
+    def test_log_timing_data_long_question(self, mock_append):
         """Test timing data logging with long question (truncation)"""
         long_question = "A" * 150  # 150 characters
 
@@ -222,29 +211,19 @@ class TestLogger(unittest.TestCase):
 
         log_timing_data(long_question, self.session_id, timing_summary)
 
-        row = mock_sheet.append_row.call_args[0][0]
+        row = mock_append.call_args[0][2]
 
         # Question should be truncated to 103 chars (100 + "...")
         self.assertEqual(len(row[2]), 103)
         self.assertTrue(row[2].endswith("..."))
 
-    @patch("src.logger.timing_sheet")
-    @patch("builtins.open", create=True)
-    def test_log_timing_data_fallback_on_error(self, mock_open, mock_sheet):
-        """Test fallback to file logging for timing data on error"""
-        mock_sheet.append_row.side_effect = Exception("Connection error")
-
-        mock_file = MagicMock()
-        mock_open.return_value.__enter__.return_value = mock_file
-
+    @patch("src.logger._append_csv_row")
+    def test_log_timing_data_append_error_is_handled(self, mock_append):
+        """Test that append errors do not break timing logging"""
+        mock_append.side_effect = Exception("Write error")
         timing_summary = {"total_time_ms": 100, "step_times": {}}
 
         log_timing_data(self.question, self.session_id, timing_summary)
-
-        # Verify fallback file was opened
-        mock_open.assert_called_once_with("/tmp/timing_log.txt", "a")
-        mock_file.write.assert_called_once()
-
 
 if __name__ == "__main__":
     unittest.main()

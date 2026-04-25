@@ -14,7 +14,7 @@ RUN pip install --upgrade pip setuptools wheel && \
 
 The Docker build is currently in progress. Here's what it's doing:
 
-1. ✅ Loading base Python 3.10-slim image
+1. ✅ Loading base Python 3.13-slim image
 2. ✅ Setting working directory and environment variables
 3. ⏳ Installing system dependencies (build-essential, curl)
 4. ⏳ Installing Python dependencies (this may take 10-15 minutes due to large packages like PyTorch ~900MB)

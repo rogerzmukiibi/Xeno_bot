@@ -3,8 +3,6 @@ from typing import List
 
 import gradio as gr
 
-from src.logger import log_feedback
-
 
 def respond(
     message: str, history: List, session_id: str, intent_classifier, retriever
@@ -77,34 +75,6 @@ def create_interface(intent_classifier, retriever):
                 scale=4,
             )
             send_button = gr.Button("Send", variant="primary", scale=1)
-
-        # ===== FEEDBACK SECTION =====
-        with gr.Row():
-            with gr.Accordion("Rate this response / Flag Issue", open=False):
-                with gr.Row():
-                    thumbs_up = gr.Button("👍 Good Answer")
-                    thumbs_down = gr.Button("👎 Bad / Flag")
-
-                feedback_reason = gr.Textbox(
-                    label="Reason ", placeholder="E.g., Incorrect fees, hallucination,"
-                )
-                feedback_status = gr.Label(value="", label="Status", show_label=False)
-
-        # Feedback Event Listeners
-        # Logic: If Thumbs Up is clicked, send 'Positive'. If Textbox is empty, reason defaults to "Good".
-        thumbs_up.click(
-            fn=lambda h, s, r: log_feedback("Positive", r if r else "Good", h, s),
-            inputs=[chatbot, session_id_box, feedback_reason],
-            outputs=[feedback_status],
-        )
-
-        # Logic: If Thumbs Down is clicked, send 'Negative' with the content of the textbox.
-        thumbs_down.click(
-            fn=lambda r, h, s: log_feedback("Negative", r, h, s),
-            inputs=[feedback_reason, chatbot, session_id_box],
-            outputs=[feedback_status],
-        )
-        # =============================
 
         # Chat Event Listeners - Pass components to respond function
         send_button.click(

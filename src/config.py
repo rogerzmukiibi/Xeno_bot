@@ -5,19 +5,13 @@ Handles environment variables and application settings
 
 import os
 
-from google import genai
-
-# === API Configuration ===
-GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
-if not GEMINI_API_KEY:
-    raise ValueError("GEMINI_API_KEY environment variable not set.")
-
-# Initialize the genai client
-genai_client = genai.Client(api_key=GEMINI_API_KEY)
-
 # === Model Configuration ===
-EMBEDDING_MODEL = "text-embedding-004"
-LLM_MODEL_NAME = "models/gemma-3-4b-it"
+EMBEDDING_MODEL = "BAAI/bge-small-en-v1.5"
+LLM_MODEL_NAME = os.environ.get("LLM_MODEL_NAME", "google/gemma-2-2b-it")
+HF_TOKEN = os.environ.get("HF_TOKEN")
+LLM_TIMEOUT_SECONDS = int(os.environ.get("LLM_TIMEOUT_SECONDS", "90"))
+LLM_MAX_NEW_TOKENS = int(os.environ.get("LLM_MAX_NEW_TOKENS", "256"))
+LLM_TEMPERATURE = float(os.environ.get("LLM_TEMPERATURE", "0.2"))
 
 # === Database Configuration ===
 COLLECTION_NAME = "xeno_collection"
@@ -26,13 +20,6 @@ SQLITE_DB_PATH = "xeno_memory.db"
 
 # === Knowledge Base Configuration ===
 KNOWLEDGE_BASE_PATH = "XENO_Uganda_KnowledgeBase_Advisory.json"
-
-# === Google Sheets Configuration ===
-GOOGLE_SHEETS_CREDENTIALS_ENV = "GOOGLE_SHEETS_CREDENTIALS"
-SPREADSHEET_NAME = "Response_Log"
-RESPONSE_SHEET_INDEX = 0  # sheet1
-TIMING_SHEET_NAME = "Timing_Log"
-FEEDBACK_SHEET_NAME = "Feedback_Log"
 
 # === RAG Configuration ===
 RAG_TOP_K = 4

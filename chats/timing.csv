@@ -1,0 +1,13 @@
+Timestamp,Session_ID,Question,Total_Time_MS,Intent_Classification_MS,Memory_Retrieval_MS,RAG_Retrieval_MS,Embedding_Generation_MS,Similarity_Calculation_MS,Context_Processing_MS,LLM_Generation_MS,Memory_Update_MS,Logging_MS,Error_Step,Notes
+2026-04-25 09:24:33,24b2b2f4-894a-40e7-9920-b15d16f2609a,What is a bond?,38144.26,0,0,12964.86,24445.67,1.26,0,0,0,0,rag_processing,"Error: You are trying to access a gated repo.
+Make sure to have access to it at https://huggingface.co/google/gemma-2-2b-it.
+401 Client Error. (Request ID: Root=1-69ec8852-00e7a00c338b9f65121ba248;07de4a1e-e476-4b28-9200-2c982adf9891)
+
+Cannot access gated repo for url https://huggingface.co/google/gemma-2-2b-it/resolve/main/config.json.
+Access to model google/gemma-2-2b-it is restricted. You must have access to it and be authenticated to access it. Please log in."
+2026-04-25 09:24:53,24b2b2f4-894a-40e7-9920-b15d16f2609a,Tell me what a bond is?,1065.49,0,0,232.06,151.37,1.13,0,0,0,0,rag_processing,"Error: You are trying to access a gated repo.
+Make sure to have access to it at https://huggingface.co/google/gemma-2-2b-it.
+401 Client Error. (Request ID: Root=1-69ec8865-28c08db04d06d8a54b2dc998;afa92849-f4f5-4f17-b29b-cc6045222da8)
+
+Cannot access gated repo for url https://huggingface.co/google/gemma-2-2b-it/resolve/main/config.json.
+Access to model google/gemma-2-2b-it is restricted. You must have access to it and be authenticated to access it. Please log in."
