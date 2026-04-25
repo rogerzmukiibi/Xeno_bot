@@ -6,7 +6,7 @@ Handles environment variables and application settings
 import os
 
 # === Model Configuration ===
-EMBEDDING_MODEL = "BAAI/bge-small-en-v1.5"
+EMBEDDING_MODEL = "sentence-transformers/all-MiniLM-L6-v2"
 LLM_MODEL_NAME = os.environ.get("LLM_MODEL_NAME", "google/gemma-2-2b-it")
 HF_TOKEN = os.environ.get("HF_TOKEN")
 LLM_TIMEOUT_SECONDS = int(os.environ.get("LLM_TIMEOUT_SECONDS", "90"))
