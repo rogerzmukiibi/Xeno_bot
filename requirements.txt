@@ -1,6 +1,6 @@
 huggingface_hub
 gradio
-pydantic==2.10.6
+pydantic
 pandas
 torch>=2.3.1
 numpy
