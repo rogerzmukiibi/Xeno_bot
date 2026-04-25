@@ -45,7 +45,7 @@ def create_interface(intent_classifier, retriever):
     Returns:
         Gradio Blocks interface
     """
-    with gr.Blocks(theme=gr.themes.Soft()) as demo:
+    with gr.Blocks() as demo:
         gr.Markdown("""
         # ASKXENO
         **Welcome to XENO AI Support!**

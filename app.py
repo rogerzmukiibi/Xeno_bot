@@ -7,6 +7,8 @@ import logging
 import os
 import traceback
 
+import gradio as gr
+
 from src.config import (COLLECTION_NAME, EMBEDDING_MODEL, LLM_MODEL_NAME,
                         HF_TOKEN, SERVER_NAME, SERVER_PORT,
                         SIMILARITY_THRESHOLD)
@@ -170,5 +172,9 @@ def get_context_and_answer(
 if __name__ == "__main__":
     iface = create_interface(intent_classifier, retriever)
     iface.launch(
-        share=False, server_name=SERVER_NAME, server_port=SERVER_PORT, ssr_mode=False
+        share=False,
+        server_name=SERVER_NAME,
+        server_port=SERVER_PORT,
+        ssr_mode=False,
+        theme=gr.themes.Soft(),
     )
