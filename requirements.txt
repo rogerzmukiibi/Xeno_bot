@@ -1,4 +1,4 @@
-huggingface_hub==0.25.2
+huggingface_hub
 gradio
 pydantic==2.10.6
 pandas
